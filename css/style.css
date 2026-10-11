@@ -460,6 +460,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .ov { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--overlap-soft); color: var(--overlap); font-size: .72rem; font-weight: 700; font-style: normal; }
 .ov.high { background: var(--danger); color: #fff; }
 
+/* ---------- Trascinamento, calendario personale, novità dello specializzando ---------- */
+.cal-grid { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.day.sel { outline: 3px solid var(--primary); outline-offset: -2px; background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
+.drag-hint { margin: 0; min-height: 1.3em; font-weight: 600; color: var(--primary); font-size: .9rem; }
+.drag-hint:empty { display: none; }
+.ics-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.res-news { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.res-news li { display: flex; gap: 10px; align-items: baseline; }
+.news-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%; font-size: .8rem; font-weight: 800; color: #fff; background: var(--muted); }
+.res-news .ok .news-icon { background: var(--ok); }
+.res-news .no .news-icon { background: var(--danger); }
+.res-news .msg .news-icon { background: var(--accent); }
+
 /* ---------- Commenti ---------- */
 textarea { width: 100%; resize: vertical; line-height: 1.4; }
 .form-row.end { justify-content: flex-end; }

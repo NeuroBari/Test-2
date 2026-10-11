@@ -7,6 +7,9 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 **Specializzando**
 - sceglie l'anno di corso e il proprio nome;
 - segna i singoli giorni sul calendario del mese come *Ferie* o *Congresso* (un tocco per segnare, un altro per togliere), oppure un intero periodo con il modulo "Segna un periodo", con l'opzione di escludere weekend e festivi e di aggiungere una nota (es. il nome del congresso);
+- può **trascinare** sul calendario per segnare (o cancellare) più giorni insieme: con il mouse tieni premuto e trascina, sul telefono tieni premuto un attimo sul giorno e poi trascina; i weekend e i festivi in mezzo vengono saltati;
+- trova un riquadro **Novità** con le richieste approvate o rifiutate e i nuovi messaggi del rappresentante dall'ultima visita;
+- con **"Aggiungi al mio calendario"** scarica un file .ics con i giorni approvati dell'anno accademico da importare in Google Calendar, Calendario di iPhone o Outlook;
 - vede lo stato di ogni richiesta (in attesa / approvata / rifiutata) e quanti colleghi del suo anno sono assenti in ogni giorno (👥);
 - vede il contatore delle ferie dell'anno accademico (1° novembre – 31 ottobre), con un **avviso se supera i 30 giorni**. Per i congressi non c'è nessun limite.
 

@@ -326,12 +326,14 @@ function renderResident(year) {
   rerender(el, `
     ${picker}
     ${alert}
+    ${residentNewsHtml(year, rid)}
     ${residentCommentsHtml(year, rid, ay)}
     ${stats}
     ${card(`
       <div class="cal-head">
         <div class="brush" role="group" aria-label="Cosa segnare">${brushes}</div>
-        <p class="muted small">Tocca un giorno per segnarlo, toccalo di nuovo per toglierlo. 👥 = colleghi del tuo anno assenti quel giorno.</p>
+        <p class="muted small">Tocca un giorno per segnarlo, toccalo di nuovo per toglierlo. Per più giorni <strong>trascina</strong> sul calendario (sul telefono: tieni premuto un attimo, poi trascina). 👥 = colleghi del tuo anno assenti quel giorno.</p>
+        <p class="drag-hint" id="drag-hint" aria-live="polite"></p>
       </div>
       ${calendarHtml(year, rid, idx)}
       ${legendHtml()}
@@ -353,8 +355,52 @@ function renderResident(year) {
         </div>
       </form>
     `)}
-    ${card(`<h3>Le mie richieste · ${D.monthLabel(ui.y, ui.m)}</h3>${list}`)}
+    ${card(`<h3>Le mie richieste · ${D.monthLabel(ui.y, ui.m)}</h3>${list}
+      <div class="ics-row">
+        <button type="button" class="btn" data-action="ics">📅 Aggiungi al mio calendario</button>
+        <span class="muted small">Scarica i giorni <strong>approvati</strong> dell'a.a. ${ay.label} per Google Calendar, Calendario di iPhone o Outlook.</span>
+      </div>`)}
   `);
+}
+
+// Novità per lo specializzando: richieste approvate o rifiutate e messaggi del rappresentante
+// dall'ultima visita (ricordata su questo dispositivo).
+const resSeenKey = (year, rid) => `res-seen-${year.id}-${rid}`;
+function resSeen(year, rid) {
+  try { return Number(localStorage.getItem(resSeenKey(year, rid))) || 0; } catch { return 0; }
+}
+function setResSeen(year, rid, t) {
+  try { localStorage.setItem(resSeenKey(year, rid), String(t)); } catch { /* ignorato */ }
+}
+
+function residentNewsHtml(year, rid) {
+  const since = resSeen(year, rid);
+  if (!since) {
+    setResSeen(year, rid, Date.now()); // primo accesso: da qui in poi si segnalano le novità
+    return "";
+  }
+  const decided = Object.values(state.entries).filter((e) =>
+    e.yearId === year.id && e.residentId === rid && e.status !== "pending" && (e.updatedAt || 0) > since);
+  const comments = year.commentsEnabled
+    ? Object.values(state.comments || {}).filter((c) => c.yearId === year.id && (!c.residentId || c.residentId === rid) && c.createdAt > since)
+    : [];
+  if (!decided.length && !comments.length) return "";
+  const groups = D.groupRanges(decided, (e) => `${e.type}|${e.status}`);
+  const items = [
+    ...groups.map((g) => {
+      const e = g.items[0];
+      const ok = e.status === "approved";
+      return `<li class="${ok ? "ok" : "no"}"><span class="news-icon" aria-hidden="true">${ok ? "✓" : "✕"}</span>
+        <span><strong>${TYPE_LABEL[e.type]} ${D.fmtRange(g.from, g.to)}</strong> ${ok ? "approvate" : "rifiutate"}${g.items.length > 1 ? ` (${g.items.length} gg)` : ""}</span></li>`;
+    }),
+    ...comments.map((c) => `<li class="msg"><span class="news-icon" aria-hidden="true">✉</span><span>Nuovo messaggio del rappresentante${c.residentId ? "" : " per tutti"}: “${esc(c.text.length > 90 ? c.text.slice(0, 90) + "…" : c.text)}”</span></li>`),
+  ].join("");
+  return card(`
+    <div class="news-head">
+      <h3>Novità <span class="muted small">dal ${new Date(since).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}</span></h3>
+      <button type="button" class="btn tiny ghost" data-action="res-news-seen">Ok, viste</button>
+    </div>
+    <ul class="res-news">${items}</ul>`, "news");
 }
 
 function residentCommentsHtml(year, rid, ay) {
@@ -813,6 +859,39 @@ async function toggleDay(date) {
   if (await act(() => store.saveEntries([entry]))) warnFerie(year, rid, date, entry.type);
 }
 
+/** File .ics con i giorni approvati dell'anno accademico, da importare nel calendario del telefono. */
+function downloadIcs() {
+  const year = currentYear();
+  const rid = year && currentResidentId(year);
+  if (!rid) return;
+  const ay = viewAcademicYear();
+  const mine = Object.values(state.entries).filter((e) =>
+    e.yearId === year.id && e.residentId === rid && e.status === "approved" && e.date >= ay.from && e.date <= ay.to);
+  if (!mine.length) return toast(`Non hai ancora giorni approvati nell'a.a. ${ay.label}.`, "warn");
+  const icsDate = (d) => d.replace(/-/g, "");
+  const icsText = (s) => String(s).replace(/[\\,;]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const events = D.groupRanges(mine, (e) => `${e.type}|${e.note || ""}`).map((g) => {
+    const e = g.items[0];
+    const title = e.type === "ferie" ? "Ferie" : `Congresso${e.note ? `: ${e.note}` : ""}`;
+    return [
+      "BEGIN:VEVENT",
+      `UID:${year.id}-${rid}-${g.from}-${e.type}@ferie-neurologia-bari`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(g.from)}`,
+      `DTEND;VALUE=DATE:${icsDate(D.addDays(g.to, 1))}`,
+      `SUMMARY:${icsText(title)}`,
+      `DESCRIPTION:${icsText(`${title} approvato dal rappresentante (${g.items.length} gg) - Scuola di Specializzazione in Neurologia, Bari`)}`,
+      "TRANSP:OPAQUE",
+      "END:VEVENT",
+    ].join("\r\n");
+  });
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Neurologia Bari//Ferie e Congressi//IT", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    `X-WR-CALNAME:${icsText(`Ferie e congressi ${ay.label}`)}`, ...events, "END:VCALENDAR"].join("\r\n") + "\r\n";
+  download(`ferie-congressi_${ay.label.replace("/", "-")}.ics`, ics, "text/calendar;charset=utf-8");
+  toast(`${events.length} ${events.length === 1 ? "evento scaricato" : "eventi scaricati"}: aprili per aggiungerli al calendario.`);
+}
+
 function warnFerie(year, rid, date, type) {
   if (type !== "ferie") return;
   const ay = D.academicYear(date);
@@ -835,26 +914,118 @@ async function submitRange(form) {
   if (fd.get("skip")) dates = dates.filter((d) => !D.isWeekend(d) && !D.holidayName(d));
   if (!dates.length) return toast("Nessun giorno lavorativo nel periodo selezionato.", "warn");
 
+  form.reset();
+  ui.y = Number(from.slice(0, 4));
+  ui.m = Number(from.slice(5, 7)) - 1;
+  if (await requestDays(year, rid, dates, type, note)) render();
+}
+
+/** Richiede più giorni dello stesso tipo (dal modulo "Segna un periodo" o trascinando sul calendario). */
+async function requestDays(year, rid, dates, type, note = "") {
   const list = [];
   let replacedApproved = 0;
   for (const date of dates) {
     const id = entryId(year.id, rid, date);
     const ex = state.entries[id];
-    if (ex?.status === "approved" && ex.type === type && (ex.note || "") === note) continue;
+    if (ex?.type === type && (ex.status === "pending" || (ex.status === "approved" && (ex.note || "") === note))) continue;
     if (ex?.status === "approved") replacedApproved++;
-    list.push({ id, yearId: year.id, residentId: rid, date, type, status: "pending", note, updatedAt: Date.now() });
+    list.push({ id, yearId: year.id, residentId: rid, date, type, status: "pending", note: note || (ex?.type === type ? ex.note || "" : ""), updatedAt: Date.now() });
   }
-  if (!list.length) return toast("Questi giorni sono già approvati.");
+  if (!list.length) {
+    toast("Questi giorni sono già segnati.");
+    return false;
+  }
   if (replacedApproved &&
-      !confirm(`${replacedApproved} giorni del periodo sono già approvati con un altro tipo o nota: torneranno in attesa di approvazione. Continuare?`)) return;
+      !confirm(`${replacedApproved} giorni sono già approvati con un altro tipo o nota: torneranno in attesa di approvazione. Continuare?`)) return false;
+  const ok = await act(() => store.saveEntries(list), `${list.length} ${list.length === 1 ? "giorno" : "giorni"} di ${TYPE_LABEL[type].toLowerCase()} ${list.length === 1 ? "richiesto" : "richiesti"}.`);
+  if (ok) warnFerie(year, rid, dates[dates.length - 1], type);
+  return ok;
+}
 
-  form.reset();
-  ui.y = Number(from.slice(0, 4));
-  ui.m = Number(from.slice(5, 7)) - 1;
-  if (await act(() => store.saveEntries(list), `${list.length} ${list.length === 1 ? "giorno" : "giorni"} di ${TYPE_LABEL[type].toLowerCase()} ${list.length === 1 ? "richiesto" : "richiesti"}.`)) {
-    warnFerie(year, rid, to, type);
-    render();
-  }
+/** Cancella più giorni (trascinando con lo strumento "Cancella"). */
+async function removeDays(year, rid, dates) {
+  const ids = dates.map((d) => entryId(year.id, rid, d)).filter((id) => state.entries[id]);
+  if (!ids.length) return;
+  const approved = ids.filter((id) => state.entries[id].status === "approved").length;
+  if (approved && !confirm(`${approved} di questi giorni sono già approvati. Cancellarli comunque?`)) return;
+  await act(() => store.deleteEntries(ids), `${ids.length} ${ids.length === 1 ? "giorno cancellato" : "giorni cancellati"}.`);
+}
+
+// ---------------------------------------------------------------------------
+// Selezione trascinando sul calendario
+// Mouse: tieni premuto e trascina. Telefono: tieni premuto un attimo sul giorno, poi trascina.
+// ---------------------------------------------------------------------------
+const drag = { start: null, end: null, active: false, timer: null, x: 0, y: 0, suppressClick: false };
+
+function dragDates() {
+  const [a, b] = [drag.start, drag.end].sort();
+  let dates = D.rangeDates(a, b);
+  // Trascinando su più giorni si saltano weekend e festivi (se si parte da un giorno lavorativo)
+  if (dates.length > 1 && !D.isWeekend(drag.start) && !D.holidayName(drag.start))
+    dates = dates.filter((d) => !D.isWeekend(d) && !D.holidayName(d));
+  return dates;
+}
+
+function paintDrag() {
+  const sel = new Set(drag.active ? dragDates() : []);
+  document.querySelectorAll("#view-resident .day[data-date]").forEach((el) => el.classList.toggle("sel", sel.has(el.dataset.date)));
+  const hint = $("#drag-hint");
+  if (hint) hint.textContent = drag.active && sel.size > 1 ? `${sel.size} giorni selezionati — rilascia per ${ui.brush === "cancella" ? "cancellarli" : `segnarli come ${TYPE_LABEL[ui.brush].toLowerCase()}`}` : "";
+}
+
+function wireDrag(res) {
+  const begin = () => {
+    drag.timer = null;
+    drag.active = true;
+    navigator.vibrate?.(12);
+    paintDrag();
+  };
+  res.addEventListener("pointerdown", (e) => {
+    const day = e.target.closest("button.day[data-date]");
+    drag.suppressClick = false;
+    if (!day || (e.pointerType === "mouse" && e.button !== 0)) return;
+    drag.start = drag.end = day.dataset.date;
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    if (e.pointerType === "mouse") begin();
+    else drag.timer = setTimeout(begin, 320); // sul telefono serve una pressione prolungata, così lo scorrimento resta libero
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (drag.timer && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8) {
+      clearTimeout(drag.timer); // sta scorrendo la pagina
+      drag.timer = null;
+    }
+    if (!drag.active) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("#view-resident button.day[data-date]");
+    if (el && el.dataset.date !== drag.end) {
+      drag.end = el.dataset.date;
+      paintDrag();
+    }
+  });
+  // Mentre si trascina con il dito la pagina non deve scorrere
+  res.addEventListener("touchmove", (e) => { if (drag.active) e.preventDefault(); }, { passive: false });
+  const finish = async () => {
+    clearTimeout(drag.timer);
+    drag.timer = null;
+    if (!drag.active) return;
+    drag.active = false;
+    const dates = dragDates();
+    paintDrag();
+    if (dates.length < 2) return; // un solo giorno: ci pensa il normale tocco
+    drag.suppressClick = true; // il clic che segue questo rilascio non è un tocco
+    const year = currentYear();
+    const rid = year && currentResidentId(year);
+    if (!rid) return;
+    if (ui.brush === "cancella") await removeDays(year, rid, dates);
+    else await requestDays(year, rid, dates, ui.brush);
+  };
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", () => {
+    clearTimeout(drag.timer);
+    drag.timer = null;
+    drag.active = false;
+    paintDrag();
+  });
 }
 
 /** Cambia stato a più richieste, chiedendo conferma se si superano i giorni di ferie. */
@@ -946,7 +1117,17 @@ function wire() {
       return render();
     }
     const day = e.target.closest("button[data-date]");
-    if (day) return toggleDay(day.dataset.date);
+    if (day) {
+      if (drag.suppressClick) return; // fine di un trascinamento, non un tocco
+      return toggleDay(day.dataset.date);
+    }
+    if (e.target.closest('[data-action="ics"]')) return downloadIcs();
+    if (e.target.closest('[data-action="res-news-seen"]')) {
+      const year = currentYear();
+      const rid = year && currentResidentId(year);
+      if (rid) setResSeen(year, rid, Date.now());
+      return render();
+    }
     const cancel = e.target.closest('[data-action="cancel-group"]');
     if (cancel) {
       const ids = cancel.dataset.ids.split(",");
@@ -955,6 +1136,7 @@ function wire() {
       await act(() => store.deleteEntries(ids), "Richiesta annullata.");
     }
   });
+  wireDrag(res);
   res.addEventListener("submit", (e) => {
     e.preventDefault();
     if (e.target.id === "range-form") submitRange(e.target);
