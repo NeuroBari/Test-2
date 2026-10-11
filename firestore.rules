@@ -14,15 +14,15 @@ service cloud.firestore {
       allow delete: if true;
     }
 
-    match /entries/{entryId} {
+    // Un documento per specializzando e anno accademico: id = yearId__residentId__ay
+    match /absences/{docId} {
       allow read: if true;
-      allow create, update: if request.resource.data.type in ['ferie', 'congresso']
-                            && request.resource.data.status in ['pending', 'approved', 'rejected']
-                            && request.resource.data.date is string
-                            && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-                            && request.resource.data.yearId is string
+      allow create, update: if request.resource.data.yearId is string
                             && request.resource.data.residentId is string
-                            && (!('note' in request.resource.data) || request.resource.data.note.size() <= 120);
+                            && request.resource.data.ay is string
+                            && request.resource.data.days is map
+                            && request.resource.data.days.size() <= 400
+                            && docId == request.resource.data.yearId + '__' + request.resource.data.residentId + '__' + request.resource.data.ay;
       allow delete: if true;
     }
 

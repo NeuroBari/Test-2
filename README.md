@@ -44,6 +44,10 @@ Ricarica il sito: il badge diventa verde ("Dati condivisi") e le modifiche compa
 
 > La `apiKey` di Firebase non è un segreto: identifica il progetto ed è normale che sia pubblica nel codice del sito. La protezione del database dipende dalle regole Firestore.
 
+### Quante persone regge il piano gratuito?
+
+Il piano gratuito Spark consente 50.000 letture e 20.000 scritture al giorno e 1 GB di spazio. Il sito salva un documento per specializzando per anno accademico e, quando si apre, legge solo l'anno accademico visualizzato. Un'apertura costa quindi circa una lettura per specializzando (≈ 50 con 50 persone), cioè circa 1.000 aperture al giorno senza pagare nulla. Ogni giorno segnato o approvato costa una scrittura.
+
 ## Primo utilizzo
 
 1. Apri la scheda **Rappresentante**, scegli il tuo anno di corso e imposta un PIN (il primo che entra lo sceglie).

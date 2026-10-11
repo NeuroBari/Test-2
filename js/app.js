@@ -146,6 +146,8 @@ const card = (html, cls = "") => `<section class="card ${cls}">${html}</section>
 // Render
 // ---------------------------------------------------------------------------
 function render() {
+  // Con Firebase carica (una volta) le richieste dell'anno accademico visualizzato
+  store.watchAcademicYear(viewAcademicYear().from).catch((err) => toast("Errore nel caricamento: " + err.message, "error"));
   if (!state.years[ui.yearId]) ui.yearId = yearsSorted()[0]?.id ?? null;
   const year = currentYear();
 
@@ -481,7 +483,7 @@ function renderRep(year) {
       <div class="form-row">
         <button type="button" class="btn" data-action="add-year">+ Aggiungi anno di corso</button>
         ${residents.length ? "" : `<button type="button" class="btn ghost danger-text" data-action="delete-year">Elimina ${esc(year.label)}</button>`}
-        <button type="button" class="btn ghost" data-action="backup-export">Backup dati (JSON)</button>
+        <button type="button" class="btn ghost" data-action="backup-export">${store.mode === "local" ? "Backup dati (JSON)" : `Backup a.a. ${ay.label} (JSON)`}</button>
         ${store.mode === "local" ? `<label class="btn ghost">Ripristina backup<input type="file" id="import-file" accept="application/json" hidden></label>` : ""}
       </div>
     `)}
@@ -806,6 +808,12 @@ function wire() {
     return;
   }
   state = store.data;
+  try {
+    await store.watchAcademicYear(viewAcademicYear().from);
+  } catch (err) {
+    $("#loading").textContent = "Impossibile caricare i dati: " + (err?.message || err);
+    return;
+  }
   $("#loading").remove();
   const badge = $("#mode-badge");
   if (store.mode === "firebase") {
