@@ -17,6 +17,7 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - avviso per chi supera i 30 giorni di ferie e richiesta di conferma se un'approvazione li fa superare;
 - **download del riepilogo dei giorni approvati** in PDF (mese o anno accademico, con il dettaglio mese per mese e lo spazio per la firma) o in CSV per Excel;
 - **commenti del rappresentante** (da attivare in *Impostazioni*, per ogni anno di corso): servono a segnalare problemi nell'approvazione. Ogni commento può riguardare uno specializzando o tutti, con un periodo facoltativo, e si può scrivere direttamente dall'elenco delle sovrapposizioni con il pulsante *Commenta*. Lo specializzando interessato li vede nella sua pagina e, se i commenti sono attivi, finiscono nel PDF nella sezione "Commenti del rappresentante";
+- **turni (reparti)**: il rappresentante carica l'Excel dei turni del proprio anno (una riga per specializzando, una colonna per mese da novembre a ottobre, nella cella il reparto). Il sito associa i nomi del file agli specializzandi (anche soprannomi come "MYRI"; chi non c'è ancora può essere aggiunto direttamente dal file) e segnala in **rosso** le sovrapposizioni tra colleghi dello stesso reparto, in arancione le altre. Lo specializzando vede il proprio reparto del mese e un ⚠ nei giorni in cui un collega dello stesso reparto è già assente. L'Excel può essere ricaricato quando cambiano i turni: i nomi vengono riconosciuti in automatico;
 - gestione dell'elenco degli specializzandi, del PIN e backup JSON.
 
 Le festività nazionali italiane (Pasqua e Pasquetta comprese) sono evidenziate automaticamente.
@@ -82,5 +83,6 @@ js/app.js         interfaccia e logica
 js/store.js       salvataggio dati (Firestore o localStorage)
 js/dates.js       date, festività italiane, intervalli
 js/export.js      riepilogo PDF (jsPDF) e CSV
+js/rotations.js   lettura dell'Excel dei turni (SheetJS)
 firestore.rules   regole di sicurezza Firestore
 ```

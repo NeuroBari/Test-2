@@ -1,7 +1,8 @@
 import { createStore } from "./store.js";
-import { FERIE_LIMIT, COURSE_YEARS } from "./config.js";
+import { FERIE_LIMIT, COURSE_YEARS, ACADEMIC_YEAR_START_MONTH } from "./config.js";
 import * as D from "./dates.js";
 import { buildReport, exportPdf, exportCsv } from "./export.js";
+import { parseRotationsFile, guessResident, monthKey, normName } from "./rotations.js";
 
 const TYPE_LABEL = { ferie: "Ferie", congresso: "Congresso" };
 const STATUS_LABEL = { pending: "In attesa", approved: "Approvato", rejected: "Rifiutato" };
@@ -120,6 +121,24 @@ function commentsOf(year, ay) {
   return Object.values(state.comments || {})
     .filter((c) => c.yearId === year.id && c.ay === ay.from)
     .sort((a, b) => start(a).localeCompare(start(b)) || a.createdAt - b.createdAt);
+}
+
+/** Reparto/rotazione dello specializzando nel mese della data, dall'Excel dei turni ("" se non caricato). */
+function rotationOf(year, rid, date) {
+  return year.rotations?.[D.academicYear(date).from]?.byResident?.[rid]?.[date.slice(0, 7)] || "";
+}
+
+/** Reparti in cui due o più degli assenti di quel giorno sono in turno insieme. */
+function sharedRotations(year, list, date) {
+  const by = new Map();
+  for (const e of list) {
+    const name = rotationOf(year, e.residentId, date);
+    if (!name) continue;
+    const k = normName(name);
+    if (!by.has(k)) by.set(k, { name, list: [] });
+    by.get(k).list.push(e);
+  }
+  return [...by.values()].filter((g) => g.list.length >= 2);
 }
 
 /** Periodo a cui si riferisce un commento ("" se generico). */
@@ -371,6 +390,8 @@ function calendarHtml(year, rid, idx) {
     const d = Number(date.slice(8));
     const mine = state.entries[entryId(year.id, rid, date)];
     const others = (idx.byDate.get(date) || []).filter((e) => e.residentId !== rid);
+    const myRot = normName(rotationOf(year, rid, date));
+    const sameRot = myRot ? others.filter((e) => normName(rotationOf(year, e.residentId, date)) === myRot) : [];
     const hol = D.holidayName(date);
     const cls = [
       D.isWeekend(date) && "weekend",
@@ -382,14 +403,19 @@ function calendarHtml(year, rid, idx) {
     if (hol) titleParts.push(hol);
     if (mine) titleParts.push(`${TYPE_LABEL[mine.type]} – ${STATUS_LABEL[mine.status]}${mine.note ? ` (${mine.note})` : ""}`);
     if (others.length) titleParts.push("Assenti: " + others.map((e) => `${nameOf(year, e.residentId)} (${TYPE_LABEL[e.type]})`).join(", "));
+    if (sameRot.length) titleParts.push(`Nel tuo stesso reparto: ${sameRot.map((e) => nameOf(year, e.residentId)).join(", ")}`);
     cells += `<button type="button" class="day ${cls}" data-date="${date}" title="${esc(titleParts.join("\n"))}">
       <span class="day-num">${d}</span>
       ${hol ? `<span class="day-hol">${esc(hol)}</span>` : ""}
       ${mine ? `<span class="pill ${mine.type} ${mine.status}"><span class="long">${mine.type === "ferie" ? "Ferie" : "Congr."}</span><span class="short">${mine.type === "ferie" ? "F" : "C"}</span> ${STATUS_ICON[mine.status]}</span>` : ""}
-      ${others.length ? `<span class="others">👥 ${others.length}</span>` : ""}
+      ${others.length ? `<span class="others ${sameRot.length ? "high" : ""}">👥 ${others.length}${sameRot.length ? " ⚠" : ""}</span>` : ""}
     </button>`;
   }
-  return `<div class="calendar"><div class="cal-grid">${head}${cells}</div></div>`;
+  const rot = rotationOf(year, rid, D.iso(ui.y, ui.m, 1));
+  const rotLine = rot
+    ? `<p class="rot-line">Il tuo reparto a ${D.MONTHS[ui.m]}: <strong>${esc(rot)}</strong>. ⚠ indica colleghi dello stesso reparto già assenti.</p>`
+    : "";
+  return `${rotLine}<div class="calendar"><div class="cal-grid">${head}${cells}</div></div>`;
 }
 
 // ----- Vista rappresentante -------------------------------------------------
@@ -426,6 +452,8 @@ function renderRep(year) {
   const ay = viewAcademicYear();
   const overlapDates = dates.filter((d) => (idx.byDate.get(d) || []).length >= 2);
   const overlapSet = new Set(overlapDates);
+  // Sovrapposizioni più gravi: assenti dello stesso reparto (dall'Excel dei turni)
+  const shared = new Map(overlapDates.map((d) => [d, sharedRotations(year, idx.byDate.get(d), d)]).filter(([, s]) => s.length));
   const pendingMonth = idx.all.filter((e) => e.status === "pending" && e.date.startsWith(monthPrefix));
   const pendingClean = pendingMonth.filter((e) => !overlapSet.has(e.date));
   const overLimit = residents.filter((r) => countDays(year.id, r.id, "ferie", ay, ["approved", "pending"]) > FERIE_LIMIT);
@@ -435,13 +463,18 @@ function renderRep(year) {
   const colCls = (date) => [
     D.isWeekend(date) && "weekend",
     D.holidayName(date) && "holiday",
-    overlapSet.has(date) && "overlap",
+    overlapSet.has(date) && (shared.has(date) ? "overlap high" : "overlap"),
     date === today && "today",
   ].filter(Boolean).join(" ");
 
   const headCells = dates.map((date) => {
     const act = idx.byDate.get(date) || [];
-    const title = [D.fmtDay(date), D.holidayName(date), overlapSet.has(date) && `Sovrapposizione: ${act.map((e) => nameOf(year, e.residentId)).join(", ")}`].filter(Boolean).join("\n");
+    const title = [
+      D.fmtDay(date),
+      D.holidayName(date),
+      overlapSet.has(date) && `Sovrapposizione: ${act.map((e) => nameOf(year, e.residentId)).join(", ")}`,
+      ...(shared.get(date) || []).map((g) => `Stesso reparto (${g.name}): ${g.list.map((e) => nameOf(year, e.residentId)).join(", ")}`),
+    ].filter(Boolean).join("\n");
     return `<th class="${colCls(date)}" title="${esc(title)}">${Number(date.slice(8))}<small>${D.WD1[D.weekday(date)]}</small></th>`;
   }).join("");
 
@@ -458,7 +491,7 @@ function renderRep(year) {
     const rowPending = pendingMonth.filter((e) => e.residentId === r.id).length;
     const over = fA + fP > FERIE_LIMIT;
     return `<tr>
-      <th class="sticky name" scope="row">${esc(r.name)}</th>
+      <th class="sticky name" scope="row">${esc(r.name)}${rotationOf(year, r.id, dates[0]) ? `<small class="rot">${esc(rotationOf(year, r.id, dates[0]))}</small>` : ""}</th>
       ${cells}
       <td class="tot ${over ? "over" : ""}" title="Ferie a.a. ${ay.label}: ${fA} approvate, ${fP} in attesa">${fA}${fP ? `<small>+${fP}</small>` : ""}${over ? " ⚠" : ""}</td>
       <td class="tot">${cTot}</td>
@@ -476,18 +509,22 @@ function renderRep(year) {
         <thead><tr><th class="sticky name">Specializzando</th>${headCells}<th class="tot" title="Ferie nell'anno accademico ${ay.label}: approvate (+ in attesa)">Ferie ${ay.label}</th><th class="tot" title="Giorni di congresso nell'anno accademico ${ay.label}">Congr.</th><th></th></tr></thead>
         <tbody>${bodyRows}${countRow}</tbody>
       </table></div>
-      <p class="muted small">Clic su una cella per cambiare stato: in attesa → approvato → rifiutato. Le colonne arancioni indicano giorni in cui più colleghi sono assenti.</p>`
+      <p class="muted small">Clic su una cella per cambiare stato: in attesa → approvato → rifiutato. Le colonne arancioni indicano giorni in cui più colleghi sono assenti; quelle rosse, assenti dello stesso reparto (dall'Excel dei turni).</p>`
     : `<p class="muted">Aggiungi gli specializzandi del ${groupLabel(year)} nella sezione qui sotto.</p>`;
 
   // Sovrapposizioni
   const conflicts = overlapDates.length
     ? overlapDates.map((date) => {
         const list = idx.byDate.get(date);
-        return `<div class="conflict">
-          <div class="conflict-date">${D.fmtDay(date)}<small>${list.length} assenti</small></div>
+        const groups = shared.get(date) || [];
+        const sharedIds = new Set(groups.flatMap((g) => g.list.map((e) => e.id)));
+        return `<div class="conflict ${groups.length ? "high" : ""}">
+          <div class="conflict-date">${D.fmtDay(date)}<small>${list.length} assenti</small>
+            ${groups.map((g) => `<span class="badge high">Stesso reparto: ${esc(g.name)}</span>`).join("")}</div>
           <ul>${list.sort((a, b) => nameOf(year, a.residentId).localeCompare(nameOf(year, b.residentId), "it")).map((e) => `<li>
             <span class="dot ${e.type}"></span>
-            <span class="req-main"><strong>${esc(nameOf(year, e.residentId))}</strong> · ${TYPE_LABEL[e.type]}${e.note ? ` <span class="muted">— ${esc(e.note)}</span>` : ""}</span>
+            <span class="req-main"><strong>${esc(nameOf(year, e.residentId))}</strong> · ${TYPE_LABEL[e.type]}${e.note ? ` <span class="muted">— ${esc(e.note)}</span>` : ""}
+              ${rotationOf(year, e.residentId, date) ? `<span class="rot-chip ${sharedIds.has(e.id) ? "high" : ""}">${esc(rotationOf(year, e.residentId, date))}</span>` : ""}</span>
             <span class="status ${e.status}">${STATUS_LABEL[e.status]}</span>
             <span class="actions">
               ${e.status !== "approved" ? `<button type="button" class="btn tiny ok" data-action="set-status" data-id="${esc(e.id)}" data-status="approved">Approva</button>` : ""}
@@ -512,7 +549,7 @@ function renderRep(year) {
       </div>
       <div class="kpis">
         <div class="kpi"><span>${pendingMonth.length}</span>richieste in attesa nel mese</div>
-        <div class="kpi ${overlapDates.length ? "warn" : ""}"><span>${overlapDates.length}</span>giorni con sovrapposizioni</div>
+        <div class="kpi ${shared.size ? "danger" : overlapDates.length ? "warn" : ""}"><span>${overlapDates.length}</span>giorni con sovrapposizioni${shared.size ? `, di cui <strong>${shared.size} nello stesso reparto</strong>` : ""}</div>
         <div class="kpi ${overLimit.length ? "danger" : ""}"><span>${overLimit.length}</span>oltre ${FERIE_LIMIT} gg di ferie (a.a. ${ay.label})</div>
         <div class="kpi"><span>${residents.length}</span>specializzandi</div>
       </div>
@@ -524,6 +561,7 @@ function renderRep(year) {
     `)}
     ${card(`<h3>${D.monthLabel(ui.y, ui.m)}</h3>${table}${legendHtml()}`)}
     ${card(`<h3>Sovrapposizioni · ${D.monthLabel(ui.y, ui.m)}</h3>${conflicts}`, "conflicts")}
+    ${card(repRotationsHtml(year, residents, ay), "rotations")}
     ${year.commentsEnabled ? card(repCommentsHtml(year, residents, ay), "comments") : ""}
     ${card(`
       <h3>Scarica riepilogo</h3>
@@ -571,6 +609,64 @@ function renderRep(year) {
       </div>
     `)}
   `);
+}
+
+const titleCase = (s) => s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, (c) => c.toUpperCase());
+
+function repRotationsHtml(year, residents, ay) {
+  const draft = ui.rotDraft?.yearId === year.id ? ui.rotDraft : null;
+  if (draft) {
+    const nextAy = D.academicYear(D.addDays(ay.to, 1));
+    const monthNames = draft.months.map((m) => D.MON3[m - 1]).join(", ");
+    return `
+      <h3>Turni (reparti) · associa i nomi</h3>
+      <p class="muted">Dal foglio «${esc(draft.sheet)}» ho letto ${draft.rows.length} righe con i mesi ${monthNames}. Controlla a chi corrisponde ogni nome del file.</p>
+      <div class="form-row">
+        <label class="field"><span>Anno accademico dei turni</span>
+          <select id="rot-ay" data-keep="rot-ay">
+            <option value="${ay.from}">${ay.label}</option>
+            <option value="${nextAy.from}">${nextAy.label}</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap"><table class="map-table">
+        <thead><tr><th>Nel file</th><th>Specializzando</th><th>Reparti</th></tr></thead>
+        <tbody>${draft.rows.map((row, i) => `<tr>
+          <th scope="row">${esc(row.name)}</th>
+          <td><select data-map="${i}" data-keep="rot-map-${i}" aria-label="Specializzando per ${esc(row.name)}">
+            <option value="">— ignora —</option>
+            <option value="__new__" ${draft.guesses[i] === "__new__" ? "selected" : ""}>+ Aggiungi come «${esc(titleCase(row.name))}»</option>
+            ${residents.map((r) => `<option value="${esc(r.id)}" ${draft.guesses[i] === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
+          </select></td>
+          <td class="muted small">${esc(Object.values(row.byMonth).join(" · "))}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+      <div class="form-row end">
+        <button type="button" class="btn ghost" data-action="rot-cancel">Annulla</button>
+        <button type="button" class="btn primary" data-action="rot-save">Salva turni</button>
+      </div>`;
+  }
+
+  const loaded = year.rotations?.[ay.from];
+  const months = D.rangeDates(ay.from, ay.to).filter((d) => d.endsWith("-01"));
+  const grid = loaded
+    ? `<details class="rot-details"><summary>Mostra i turni caricati</summary>
+        <div class="table-wrap"><table class="grid rot-grid">
+          <thead><tr><th class="sticky name">Specializzando</th>${months.map((d) => `<th>${D.MON3[Number(d.slice(5, 7)) - 1]}</th>`).join("")}</tr></thead>
+          <tbody>${residents.map((r) => `<tr><th class="sticky name" scope="row">${esc(r.name)}</th>${months.map((d) => `<td>${esc(loaded.byResident?.[r.id]?.[d.slice(0, 7)] || "")}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table></div>
+      </details>`
+    : "";
+  return `
+    <h3>Turni (reparti) · a.a. ${ay.label}</h3>
+    ${loaded
+      ? `<p>Turni caricati per ${Object.keys(loaded.byResident || {}).length} specializzandi, aggiornati il ${new Date(loaded.updatedAt).toLocaleDateString("it-IT")}. Le sovrapposizioni tra colleghi dello stesso reparto sono segnate in rosso.</p>`
+      : `<p class="muted">Carica l'Excel dei turni del ${groupLabel(year)} (una riga per specializzando, una colonna per mese con il reparto): le sovrapposizioni tra colleghi dello stesso reparto verranno segnalate come conflitto più grave.</p>`}
+    <div class="form-row">
+      <label class="btn ${loaded ? "" : "primary"}">${loaded ? "Ricarica Excel turni" : "Carica Excel turni"}<input type="file" id="rot-file" accept=".xlsx,.xls,.ods,.csv" hidden></label>
+      ${loaded ? `<button type="button" class="btn ghost danger-text" data-action="rot-remove">Rimuovi turni a.a. ${ay.label}</button>` : ""}
+    </div>
+    ${grid}`;
 }
 
 function repCommentsHtml(year, residents, ay) {
@@ -665,7 +761,7 @@ async function submitRange(form) {
   form.reset();
   ui.y = Number(from.slice(0, 4));
   ui.m = Number(from.slice(5, 7)) - 1;
-  if (await act(() => store.saveEntries(list), `${list.length} giorni di ${TYPE_LABEL[type].toLowerCase()} richiesti.`)) {
+  if (await act(() => store.saveEntries(list), `${list.length} ${list.length === 1 ? "giorno" : "giorni"} di ${TYPE_LABEL[type].toLowerCase()} ${list.length === 1 ? "richiesto" : "richiesti"}.`)) {
     warnFerie(year, rid, to, type);
     render();
   }
@@ -825,6 +921,22 @@ function wire() {
   rep.addEventListener("change", async (e) => {
     const year = currentYear();
     if (!year) return;
+    if (e.target.id === "rot-file" && e.target.files[0]) {
+      const file = e.target.files[0];
+      e.target.value = "";
+      try {
+        const parsed = await parseRotationsFile(file);
+        const residents = residentsOf(year);
+        const guesses = parsed.rows.map((r) => (residents.length ? guessResident(r.name, residents, year.rotationAliases) : "__new__"));
+        // Uno specializzando indovinato per due righe: meglio lasciar scegliere al rappresentante
+        guesses.forEach((g, i) => { if (g && g !== "__new__" && guesses.indexOf(g) !== guesses.lastIndexOf(g)) guesses[i] = ""; });
+        ui.rotDraft = { yearId: year.id, ...parsed, guesses };
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+      return;
+    }
     if (e.target.id === "comments-toggle") {
       const on = e.target.checked;
       return act(() => store.saveYear({ ...year, commentsEnabled: on }), on ? "Commenti attivati." : "Commenti disattivati.");
@@ -888,6 +1000,47 @@ function wire() {
           if (commentIds.length) await store.deleteComments(commentIds);
         }, "Specializzando rimosso.");
         return;
+      }
+      case "rot-cancel":
+        ui.rotDraft = null;
+        return render();
+      case "rot-save": {
+        const draft = ui.rotDraft;
+        if (!draft) return;
+        const ayFrom = $("#rot-ay").value;
+        const startYear = Number(ayFrom.slice(0, 4));
+        const residents = [...year.residents];
+        const aliases = { ...(year.rotationAliases || {}) };
+        const byResident = {};
+        for (const sel of document.querySelectorAll("[data-map]")) {
+          const row = draft.rows[Number(sel.dataset.map)];
+          let rid = sel.value;
+          if (!rid) continue;
+          if (rid === "__new__") {
+            rid = newId("r");
+            residents.push({ id: rid, name: titleCase(row.name) });
+          }
+          if (byResident[rid]) return toast(`${residents.find((r) => r.id === rid).name} è associato a più righe del file.`, "error");
+          aliases[normName(row.name)] = rid;
+          byResident[rid] = Object.fromEntries(Object.entries(row.byMonth).map(([m, v]) => [monthKey(startYear, Number(m), ACADEMIC_YEAR_START_MONTH), v]));
+        }
+        const n = Object.keys(byResident).length;
+        if (!n) return toast("Associa almeno un nome del file a uno specializzando.", "warn");
+        ui.rotDraft = null;
+        await act(() => store.saveYear({
+          ...year,
+          residents,
+          rotationAliases: aliases,
+          rotations: { ...(year.rotations || {}), [ayFrom]: { updatedAt: Date.now(), byResident } },
+        }), `Turni salvati per ${n} specializzandi.`);
+        return render();
+      }
+      case "rot-remove": {
+        const ay = viewAcademicYear();
+        if (!confirm(`Rimuovere i turni dell'a.a. ${ay.label}?`)) return;
+        const rotations = { ...(year.rotations || {}) };
+        delete rotations[ay.from];
+        return act(() => store.saveYear({ ...year, rotations }), "Turni rimossi.");
       }
       case "comment-prefill": {
         const form = $("#comment-form");

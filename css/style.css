@@ -385,6 +385,23 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .res-list li { display: flex; gap: 6px; align-items: center; }
 .res-list input { flex: 1; min-width: 0; }
 
+/* ---------- Turni (reparti) ---------- */
+.grid .overlap.high { background: var(--danger-soft); }
+.grid thead th.overlap.high { background: var(--danger); }
+.grid .count-row td.overlap.high { color: var(--danger); }
+.grid .name .rot { display: block; font-size: .68rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
+.others.high { color: var(--danger); }
+.rot-line { margin: 0 0 10px; font-size: .9rem; }
+.rot-chip { display: inline-block; font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); margin-left: 4px; vertical-align: 1px; }
+.rot-chip.high { background: var(--danger-soft); color: var(--danger); }
+.badge.high { display: inline-block; margin-top: 4px; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--danger); color: #fff; }
+.conflict.high .conflict-date { color: var(--danger); }
+.map-table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+.map-table th, .map-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.map-table select { min-width: 190px; }
+.rot-details summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
+.rot-grid td { padding: 0 6px; white-space: nowrap; font-size: .72rem; }
+
 /* ---------- Commenti ---------- */
 textarea { width: 100%; resize: vertical; line-height: 1.4; }
 .form-row.end { justify-content: flex-end; }
