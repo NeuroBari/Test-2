@@ -124,7 +124,7 @@ h3 { font-size: 1.05rem; margin-bottom: .75rem; }
 /* ---------- Form ---------- */
 .field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
 .field.grow { flex: 1 1 220px; }
-input, select {
+input, select, textarea {
   font: inherit;
   color: var(--text);
   background: var(--surface);
@@ -134,7 +134,7 @@ input, select {
   min-height: 40px;
   max-width: 100%;
 }
-input:focus-visible, select:focus-visible, button:focus-visible, .btn:focus-within {
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, .btn:focus-within {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -383,6 +383,19 @@ input:focus-visible, select:focus-visible, button:focus-visible, .btn:focus-with
 .res-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-bottom: 14px; }
 .res-list li { display: flex; gap: 6px; align-items: center; }
 .res-list input { flex: 1; min-width: 0; }
+
+/* ---------- Commenti ---------- */
+textarea { width: 100%; resize: vertical; line-height: 1.4; }
+.form-row.end { justify-content: flex-end; }
+.comment-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.comment-form .form-row { margin-bottom: 0; }
+.comment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.comment-list li { background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; }
+.comment-list p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: .88rem; }
+.comment-head .btn { margin-left: auto; }
+.toggle-row { align-items: flex-start; margin-bottom: 14px; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; }
+.toggle-row input { margin-top: 2px; flex: none; }
 
 /* ---------- Toast ---------- */
 .toast {

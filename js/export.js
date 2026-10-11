@@ -59,7 +59,7 @@ export function rangesText(list, withNotes = false) {
 const slug = (s) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
 
-export async function exportPdf({ year, report, period, limit }) {
+export async function exportPdf({ year, report, period, limit, comments = null }) {
   await loadScript(JSPDF_URL);
   await loadScript(AUTOTABLE_URL);
   const { jsPDF } = window.jspdf;
@@ -122,6 +122,31 @@ export async function exportPdf({ year, report, period, limit }) {
     const lines = doc.splitTextToSize(n, pageW - 28);
     doc.text(lines, 14, y);
     y += lines.length * 4.5;
+  }
+
+  // Commenti del rappresentante (solo se attivati per l'anno di corso)
+  if (comments) {
+    y += 4;
+    if (y > pageH - 40) { doc.addPage(); y = 20; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Commenti del rappresentante", 14, y);
+    doc.setFont("helvetica", "normal");
+    if (comments.length) {
+      doc.autoTable({
+        startY: y + 3,
+        head: [["Specializzando", "Periodo", "Commento"]],
+        body: comments.map((c) => [c.who, c.when, c.text]),
+        styles: { fontSize: 9, cellPadding: 2, valign: "top" },
+        headStyles: { fillColor: [180, 83, 9] },
+        columnStyles: { 0: { cellWidth: 36, fontStyle: "bold" }, 1: { cellWidth: 32 } },
+      });
+      y = doc.lastAutoTable.finalY + 7;
+    } else {
+      doc.setFontSize(9);
+      doc.text("Nessun commento nel periodo.", 14, y + 6);
+      y += 12;
+    }
   }
 
   // Dettaglio mese per mese (solo per periodi più lunghi di un mese)

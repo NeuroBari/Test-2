@@ -35,7 +35,7 @@ const ui = {
   view: prefs.view === "rep" ? "rep" : "resident",
   brush: "ferie",
 };
-let state = { years: {}, entries: {} };
+let state = { years: {}, entries: {}, comments: {} };
 let store = null;
 
 const yearsSorted = () =>
@@ -72,6 +72,24 @@ function countDays(yearId, residentId, type, ay, statuses) {
     if (e.yearId === yearId && e.residentId === residentId && e.type === type &&
         statuses.includes(e.status) && e.date >= ay.from && e.date <= ay.to) n++;
   return n;
+}
+
+/** Commenti del rappresentante per un anno di corso e anno accademico, in ordine di data. */
+function commentsOf(year, ay) {
+  const start = (c) => c.from || D.toIso(new Date(c.createdAt));
+  return Object.values(state.comments || {})
+    .filter((c) => c.yearId === year.id && c.ay === ay.from)
+    .sort((a, b) => start(a).localeCompare(start(b)) || a.createdAt - b.createdAt);
+}
+
+/** Periodo a cui si riferisce un commento ("" se generico). */
+const commentWhen = (c) => (c.from ? D.fmtRange(c.from, c.to || c.from) : "");
+
+/** Il commento riguarda il periodo? Senza date conta il giorno in cui è stato scritto. */
+function commentInPeriod(c, from, to) {
+  const f = c.from || D.toIso(new Date(c.createdAt));
+  const t = c.to || f;
+  return f <= to && t >= from;
 }
 
 /** Anno accademico del mese visualizzato. */
@@ -245,6 +263,7 @@ function renderResident(year) {
   rerender(el, `
     ${picker}
     ${alert}
+    ${residentCommentsHtml(year, rid, ay)}
     ${stats}
     ${card(`
       <div class="cal-head">
@@ -273,6 +292,19 @@ function renderResident(year) {
     `)}
     ${card(`<h3>Le mie richieste · ${D.monthLabel(ui.y, ui.m)}</h3>${list}`)}
   `);
+}
+
+function residentCommentsHtml(year, rid, ay) {
+  if (!year.commentsEnabled) return "";
+  const list = commentsOf(year, ay).filter((c) => !c.residentId || c.residentId === rid);
+  if (!list.length) return "";
+  return card(`
+    <h3>Comunicazioni del rappresentante</h3>
+    <ul class="comment-list">${list.map((c) => `<li>
+      <div class="comment-head">${c.residentId ? "Per te" : "Per tutti"}${commentWhen(c) ? ` · ${commentWhen(c)}` : ""}</div>
+      <p>${esc(c.text)}</p>
+    </li>`).join("")}</ul>
+  `, "comments");
 }
 
 function legendHtml() {
@@ -416,6 +448,7 @@ function renderRep(year) {
             <span class="actions">
               ${e.status !== "approved" ? `<button type="button" class="btn tiny ok" data-action="set-status" data-id="${esc(e.id)}" data-status="approved">Approva</button>` : ""}
               <button type="button" class="btn tiny danger" data-action="set-status" data-id="${esc(e.id)}" data-status="rejected">Rifiuta</button>
+              ${year.commentsEnabled ? `<button type="button" class="btn tiny ghost" data-action="comment-prefill" data-rid="${esc(e.residentId)}" data-date="${date}">Commenta</button>` : ""}
             </span>
           </li>`).join("")}</ul>
         </div>`;
@@ -447,6 +480,7 @@ function renderRep(year) {
     `)}
     ${card(`<h3>${D.monthLabel(ui.y, ui.m)}</h3>${table}${legendHtml()}`)}
     ${card(`<h3>Sovrapposizioni · ${D.monthLabel(ui.y, ui.m)}</h3>${conflicts}`, "conflicts")}
+    ${year.commentsEnabled ? card(repCommentsHtml(year, residents, ay), "comments") : ""}
     ${card(`
       <h3>Scarica riepilogo</h3>
       <p class="muted">Documento con i soli giorni <strong>approvati</strong> per ogni specializzando del ${esc(year.label)}, con il totale ferie dell'anno accademico e l'avviso di superamento dei ${FERIE_LIMIT} giorni.</p>
@@ -460,6 +494,7 @@ function renderRep(year) {
         <button type="button" class="btn primary" data-action="export-pdf">Scarica PDF</button>
         <button type="button" class="btn" data-action="export-csv">Scarica CSV (Excel)</button>
       </div>
+      ${year.commentsEnabled ? `<p class="muted small">Il PDF include i commenti del rappresentante relativi al periodo.</p>` : ""}
     `)}
     ${card(`
       <h3>Specializzandi del ${esc(year.label)}</h3>
@@ -471,6 +506,10 @@ function renderRep(year) {
     `)}
     ${card(`
       <h3>Impostazioni</h3>
+      <label class="check toggle-row">
+        <input type="checkbox" id="comments-toggle" ${year.commentsEnabled ? "checked" : ""}>
+        <span><strong>Commenti del rappresentante</strong><br><span class="muted small">Per segnalare problemi nell'approvazione. I commenti sono visibili agli specializzandi interessati e vengono riportati nel PDF.</span></span>
+      </label>
       <form id="rename-year-form" class="form-row">
         <label class="field grow"><span>Nome dell'anno di corso</span><input name="label" value="${esc(year.label)}" maxlength="40" required></label>
         <button class="btn">Rinomina</button>
@@ -488,6 +527,38 @@ function renderRep(year) {
       </div>
     `)}
   `);
+}
+
+function repCommentsHtml(year, residents, ay) {
+  const list = commentsOf(year, ay);
+  return `
+    <h3>Commenti del rappresentante · a.a. ${ay.label}</h3>
+    <form id="comment-form" class="comment-form">
+      <div class="form-row">
+        <label class="field"><span>Riferito a</span>
+          <select name="residentId" id="cm-res" data-keep="cm-res">
+            <option value="">Tutti (commento generale)</option>
+            ${residents.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field"><span>Dal (facoltativo)</span><input type="date" name="from" id="cm-from" data-keep="cm-from"></label>
+        <label class="field"><span>Al (facoltativo)</span><input type="date" name="to" id="cm-to" data-keep="cm-to"></label>
+      </div>
+      <label class="field"><span>Commento</span>
+        <textarea name="text" id="cm-text" data-keep="cm-text" rows="3" maxlength="500" required placeholder="Es. 13–14 ottobre non approvati: tre colleghi già assenti in reparto."></textarea>
+      </label>
+      <div class="form-row end"><button class="btn primary">Aggiungi commento</button></div>
+    </form>
+    ${list.length
+      ? `<ul class="comment-list">${list.map((c) => `<li>
+          <div class="comment-head">
+            <strong>${c.residentId ? esc(nameOf(year, c.residentId)) : "Tutti"}</strong>${commentWhen(c) ? ` · ${commentWhen(c)}` : ""}
+            <span class="muted small">scritto il ${new Date(c.createdAt).toLocaleDateString("it-IT")}</span>
+            <button type="button" class="btn tiny ghost danger-text" data-action="delete-comment" data-id="${esc(c.id)}">Elimina</button>
+          </div>
+          <p>${esc(c.text)}</p>
+        </li>`).join("")}</ul>`
+      : `<p class="muted">Nessun commento nell'a.a. ${ay.label}.</p>`}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -692,6 +763,18 @@ function wire() {
         form.reset();
         return act(() => store.saveYear({ ...year, residents: [...year.residents, { id: newId("r"), name }] }), `${name} aggiunto/a.`);
       }
+      case "comment-form": {
+        const text = String(fd.get("text") || "").trim();
+        if (!text) return;
+        let from = fd.get("from") || "", to = fd.get("to") || "";
+        if (!from && to) [from, to] = [to, ""];
+        if (from && to && to < from) [from, to] = [to, from];
+        if (from && !to) to = from;
+        const ay = from ? D.academicYear(from) : viewAcademicYear();
+        const comment = { id: newId("c"), yearId: year.id, ay: ay.from, residentId: String(fd.get("residentId") || ""), from, to, text, createdAt: Date.now() };
+        form.reset();
+        return act(() => store.saveComment(comment), "Commento aggiunto.");
+      }
       case "rename-year-form": {
         const label = String(fd.get("label") || "").trim();
         if (label) return act(() => store.saveYear({ ...year, label }), "Anno di corso rinominato.");
@@ -702,6 +785,10 @@ function wire() {
   rep.addEventListener("change", async (e) => {
     const year = currentYear();
     if (!year) return;
+    if (e.target.id === "comments-toggle") {
+      const on = e.target.checked;
+      return act(() => store.saveYear({ ...year, commentsEnabled: on }), on ? "Commenti attivati." : "Commenti disattivati.");
+    }
     const rid = e.target.dataset.rename;
     if (rid) {
       const name = e.target.value.trim().replace(/\s+/g, " ");
@@ -753,12 +840,28 @@ function wire() {
       case "remove-res": {
         const rid = btn.dataset.rid;
         const ids = Object.values(state.entries).filter((x) => x.yearId === year.id && x.residentId === rid).map((x) => x.id);
+        const commentIds = Object.values(state.comments || {}).filter((c) => c.yearId === year.id && c.residentId === rid).map((c) => c.id);
         if (!confirm(`Rimuovere ${nameOf(year, rid)}? Verranno eliminate anche le sue ${ids.length} richieste.`)) return;
         await act(async () => {
           await store.saveYear({ ...year, residents: year.residents.filter((r) => r.id !== rid) });
           if (ids.length) await store.deleteEntries(ids);
+          if (commentIds.length) await store.deleteComments(commentIds);
         }, "Specializzando rimosso.");
         return;
+      }
+      case "comment-prefill": {
+        const form = $("#comment-form");
+        if (!form) return;
+        form.elements.residentId.value = btn.dataset.rid;
+        form.elements.from.value = btn.dataset.date;
+        form.elements.to.value = btn.dataset.date;
+        form.scrollIntoView({ behavior: "smooth", block: "center" });
+        form.elements.text.focus({ preventScroll: true });
+        return;
+      }
+      case "delete-comment": {
+        if (!confirm("Eliminare questo commento?")) return;
+        return act(() => store.deleteComments([btn.dataset.id]), "Commento eliminato.");
       }
       case "export-pdf":
       case "export-csv": {
@@ -768,7 +871,12 @@ function wire() {
         btn.disabled = true;
         const old = btn.textContent;
         btn.textContent = "Preparazione…";
-        await act(() => exportPdf({ year, report, period, limit: FERIE_LIMIT }));
+        const comments = year.commentsEnabled
+          ? commentsOf(year, D.academicYear(period.from))
+              .filter((c) => commentInPeriod(c, period.from, period.to))
+              .map((c) => ({ who: c.residentId ? nameOf(year, c.residentId) : "Tutti", when: commentWhen(c) || "—", text: c.text }))
+          : null;
+        await act(() => exportPdf({ year, report, period, limit: FERIE_LIMIT, comments }));
         btn.disabled = false;
         btn.textContent = old;
         return;

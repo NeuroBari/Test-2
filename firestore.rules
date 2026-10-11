@@ -26,6 +26,16 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    // Commenti del rappresentante
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.yearId is string
+                            && request.resource.data.ay is string
+                            && request.resource.data.text is string
+                            && request.resource.data.text.size() <= 500;
+      allow delete: if true;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

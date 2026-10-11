@@ -2,6 +2,8 @@
 //
 // Modello dati (Firestore)
 //   years/{yearId}       { id, label, order, residents: [{ id, name }], pinHash }
+//   comments/{id}        { id, yearId, ay, residentId ("" = tutti), from, to, text, createdAt }
+//                        commenti del rappresentante (attivabili per anno di corso)
 //   absences/{yearId}__{residentId}__{ay}
 //                        { yearId, residentId, ay, days: { "YYYY-MM-DD": { type, status, note, updatedAt } } }
 //                        un documento per specializzando e anno accademico (ay = data di inizio),
@@ -32,7 +34,7 @@ export async function createStore(onChange) {
   return localStore(onChange);
 }
 
-const normalizeYear = (id, y) => ({ id, label: id, order: 99, residents: [], pinHash: "", ...y });
+const normalizeYear = (id, y) => ({ id, label: id, order: 99, residents: [], pinHash: "", commentsEnabled: false, ...y });
 
 // ---------------------------------------------------------------------------
 // Modalità locale
@@ -43,11 +45,12 @@ function localStore(onChange) {
   function load() {
     try {
       const d = JSON.parse(localStorage.getItem(KEY));
-      if (d && d.years && d.entries) return d;
+      if (d && d.years && d.entries) return { comments: {}, ...d };
     } catch { /* storage non disponibile o dati corrotti */ }
     return {
       years: Object.fromEntries(DEFAULT_YEARS.map((y) => [y.id, normalizeYear(y.id, y)])),
       entries: {},
+      comments: {},
     };
   }
 
@@ -68,6 +71,7 @@ function localStore(onChange) {
     const fresh = load();
     data.years = fresh.years;
     data.entries = fresh.entries;
+    data.comments = fresh.comments;
     onChange(data);
   });
 
@@ -92,11 +96,20 @@ function localStore(onChange) {
       for (const id of ids) delete data.entries[id];
       persist();
     },
+    async saveComment(c) {
+      data.comments[c.id] = structuredClone(c);
+      persist();
+    },
+    async deleteComments(ids) {
+      for (const id of ids) delete data.comments[id];
+      persist();
+    },
     async importData(obj) {
       if (!obj || typeof obj.years !== "object" || typeof obj.entries !== "object")
         throw new Error("File di backup non valido");
       data.years = obj.years;
       data.entries = obj.entries;
+      data.comments = obj.comments || {};
       persist();
     },
   };
@@ -112,7 +125,7 @@ async function firebaseStore(onChange) {
 
   const app = initializeApp(FIREBASE_CONFIG);
   const db = fs.getFirestore(app);
-  const data = { years: {}, entries: {} };
+  const data = { years: {}, entries: {}, comments: {} };
 
   const seed = () => {
     // merge: non sovrascrive specializzandi o PIN se un altro client ha già creato l'anno
@@ -135,17 +148,35 @@ async function firebaseStore(onChange) {
     );
   });
 
-  // Ascolta solo le assenze dell'anno accademico visualizzato
+  // Ascolta solo le assenze e i commenti dell'anno accademico visualizzato
   let watchedAy = null;
-  let unsubscribe = null;
+  let unsubscribe = [];
   let firstLoad = null;
   function watchAcademicYear(ay) {
     if (ay === watchedAy) return firstLoad;
     watchedAy = ay;
-    unsubscribe?.();
+    unsubscribe.forEach((u) => u());
+    unsubscribe = [];
     data.entries = {};
-    firstLoad = new Promise((resolve, reject) => {
-      unsubscribe = fs.onSnapshot(
+    data.comments = {};
+    const comments = new Promise((resolve, reject) => {
+      unsubscribe.push(fs.onSnapshot(
+        fs.query(fs.collection(db, "comments"), fs.where("ay", "==", ay)),
+        (snap) => {
+          const comments = {};
+          snap.forEach((d) => (comments[d.id] = { ...d.data(), id: d.id }));
+          data.comments = comments;
+          resolve();
+          onChange(data);
+        },
+        (err) => {
+          console.error(err);
+          reject(err);
+        },
+      ));
+    });
+    const absences = new Promise((resolve, reject) => {
+      unsubscribe.push(fs.onSnapshot(
         fs.query(fs.collection(db, "absences"), fs.where("ay", "==", ay)),
         (snap) => {
           const entries = {};
@@ -164,8 +195,9 @@ async function firebaseStore(onChange) {
           console.error(err);
           reject(err);
         },
-      );
+      ));
     });
+    firstLoad = Promise.all([absences, comments]);
     return firstLoad;
   }
 
@@ -204,6 +236,8 @@ async function firebaseStore(onChange) {
         ...e,
         value: { type: e.type, status: e.status, note: e.note || "", updatedAt: e.updatedAt || Date.now() },
       })),
+    saveComment: (c) => fs.setDoc(fs.doc(db, "comments", c.id), JSON.parse(JSON.stringify(c))),
+    deleteComments: (ids) => batched(ids, (b, id) => b.delete(fs.doc(db, "comments", id))),
     deleteEntries: (ids) =>
       groupByDoc(ids, (id) => {
         const [yearId, residentId, date] = id.split("__");

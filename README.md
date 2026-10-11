@@ -16,6 +16,7 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - clic su una cella per cambiare stato (in attesa → approvato → rifiutato), approvazione per riga o in blocco (solo le richieste senza sovrapposizioni, oppure tutte);
 - avviso per chi supera i 30 giorni di ferie e richiesta di conferma se un'approvazione li fa superare;
 - **download del riepilogo dei giorni approvati** in PDF (mese o anno accademico, con il dettaglio mese per mese e lo spazio per la firma) o in CSV per Excel;
+- **commenti del rappresentante** (da attivare in *Impostazioni*, per ogni anno di corso): servono a segnalare problemi nell'approvazione. Ogni commento può riguardare uno specializzando o tutti, con un periodo facoltativo, e si può scrivere direttamente dall'elenco delle sovrapposizioni con il pulsante *Commenta*. Lo specializzando interessato li vede nella sua pagina e, se i commenti sono attivi, finiscono nel PDF nella sezione "Commenti del rappresentante";
 - gestione dell'elenco degli specializzandi, del nome dell'anno di corso, del PIN, aggiunta di nuovi anni di corso e backup JSON.
 
 Le festività nazionali italiane (Pasqua e Pasquetta comprese) sono evidenziate automaticamente.
