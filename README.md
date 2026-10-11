@@ -8,14 +8,14 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - sceglie l'anno di corso e il proprio nome;
 - segna i singoli giorni sul calendario del mese come *Ferie* o *Congresso* (un tocco per segnare, un altro per togliere), oppure un intero periodo con il modulo "Segna un periodo", con l'opzione di escludere weekend e festivi e di aggiungere una nota (es. il nome del congresso);
 - vede lo stato di ogni richiesta (in attesa / approvata / rifiutata) e quanti colleghi del suo anno sono assenti in ogni giorno (👥);
-- vede il contatore delle ferie dell'anno solare, con un **avviso se supera i 30 giorni**. Per i congressi non c'è nessun limite.
+- vede il contatore delle ferie dell'anno accademico (1° novembre – 31 ottobre), con un **avviso se supera i 30 giorni**. Per i congressi non c'è nessun limite.
 
 **Rappresentante** (area protetta da un PIN per ogni anno di corso)
 - tabella del mese con tutti gli specializzandi del suo anno: le **colonne arancioni indicano i giorni in cui più colleghi si sovrappongono**;
 - elenco delle sovrapposizioni, con i pulsanti Approva/Rifiuta per decidere caso per caso;
 - clic su una cella per cambiare stato (in attesa → approvato → rifiutato), approvazione per riga o in blocco (solo le richieste senza sovrapposizioni, oppure tutte);
 - avviso per chi supera i 30 giorni di ferie e richiesta di conferma se un'approvazione li fa superare;
-- **download del riepilogo dei giorni approvati** in PDF (mese o anno solare, con il dettaglio mese per mese e lo spazio per la firma) o in CSV per Excel;
+- **download del riepilogo dei giorni approvati** in PDF (mese o anno accademico, con il dettaglio mese per mese e lo spazio per la firma) o in CSV per Excel;
 - gestione dell'elenco degli specializzandi, del nome dell'anno di corso, del PIN, aggiunta di nuovi anni di corso e backup JSON.
 
 Le festività nazionali italiane (Pasqua e Pasquetta comprese) sono evidenziate automaticamente.
@@ -52,7 +52,7 @@ Ricarica il sito: il badge diventa verde ("Dati condivisi") e le modifiche compa
 
 ## Note e limiti
 
-- Il limite di 30 giorni si calcola per **anno solare** e somma le ferie approvate e quelle in attesa (le rifiutate non contano). Si modifica con `FERIE_LIMIT` in `js/config.js`, dove si cambiano anche gli anni di corso iniziali (I–IV).
+- Il limite di 30 giorni si calcola per **anno accademico, dal 1° novembre al 31 ottobre dell'anno successivo**, e somma le ferie approvate e quelle in attesa (le rifiutate non contano). Limite e mese di inizio si modificano con `FERIE_LIMIT` e `ACADEMIC_YEAR_START_MONTH` in `js/config.js`, dove si cambiano anche gli anni di corso iniziali (I–IV).
 - Si conta ogni giorno segnato come ferie: con l'opzione "Escludi sabati, domeniche e festivi" si richiedono solo i giorni lavorativi.
 - Il PIN del rappresentante e la scelta del nome sono una protezione "di cortesia", adatta a un gruppo di colleghi che si fida l'uno dell'altro. Chi conosce il link e sa usare gli strumenti per sviluppatori potrebbe modificare i dati direttamente. Se serve una protezione reale, il passo successivo è aggiungere il login con Firebase Authentication e restringere le regole Firestore.
 - Le date sono salvate come `AAAA-MM-GG`, nel fuso orario del dispositivo.

@@ -65,13 +65,17 @@ function indexYear(year) {
   return { all, byDate };
 }
 
-function countDays(yearId, residentId, type, calYear, statuses) {
+/** Giorni di un tipo nell'anno accademico ay ({ from, to }). */
+function countDays(yearId, residentId, type, ay, statuses) {
   let n = 0;
   for (const e of Object.values(state.entries))
     if (e.yearId === yearId && e.residentId === residentId && e.type === type &&
-        statuses.includes(e.status) && e.date.startsWith(calYear + "-")) n++;
+        statuses.includes(e.status) && e.date >= ay.from && e.date <= ay.to) n++;
   return n;
 }
+
+/** Anno accademico del mese visualizzato. */
+const viewAcademicYear = () => D.academicYear(D.iso(ui.y, ui.m, 1));
 
 // Sblocco area rappresentante (per sessione del browser)
 const unlockedMem = {};
@@ -186,30 +190,30 @@ function renderResident(year) {
   }
 
   const idx = indexYear(year);
-  const calYear = String(ui.y);
-  const fA = countDays(year.id, rid, "ferie", calYear, ["approved"]);
-  const fP = countDays(year.id, rid, "ferie", calYear, ["pending"]);
-  const cA = countDays(year.id, rid, "congresso", calYear, ["approved"]);
-  const cP = countDays(year.id, rid, "congresso", calYear, ["pending"]);
+  const ay = viewAcademicYear();
+  const fA = countDays(year.id, rid, "ferie", ay, ["approved"]);
+  const fP = countDays(year.id, rid, "ferie", ay, ["pending"]);
+  const cA = countDays(year.id, rid, "congresso", ay, ["approved"]);
+  const cP = countDays(year.id, rid, "congresso", ay, ["pending"]);
   const fTot = fA + fP;
   const over = fTot > FERIE_LIMIT;
 
   const alert = over
-    ? `<div class="alert danger" role="alert"><strong>Limite superato:</strong> hai ${fTot} giorni di ferie nel ${calYear} (approvati + in attesa), oltre il limite di ${FERIE_LIMIT}.</div>`
+    ? `<div class="alert danger" role="alert"><strong>Limite superato:</strong> hai ${fTot} giorni di ferie nell'a.a. ${ay.label} (approvati + in attesa), oltre il limite di ${FERIE_LIMIT}.</div>`
     : fTot >= FERIE_LIMIT - 5
-      ? `<div class="alert warn">Ti restano ${FERIE_LIMIT - fTot} giorni di ferie per il ${calYear}.</div>`
+      ? `<div class="alert warn">Ti restano ${FERIE_LIMIT - fTot} giorni di ferie per l'a.a. ${ay.label}.</div>`
       : "";
 
   const stats = `
     <div class="stats">
       <div class="stat ferie ${over ? "over" : ""}">
-        <span class="stat-label">Ferie ${calYear}</span>
+        <span class="stat-label">Ferie a.a. ${ay.label}</span>
         <span class="stat-value">${fTot}<small> / ${FERIE_LIMIT}</small></span>
         <div class="meter"><span style="width:${Math.min(100, (fTot / FERIE_LIMIT) * 100)}%"></span></div>
         <span class="stat-sub">${fA} approvati · ${fP} in attesa</span>
       </div>
       <div class="stat congresso">
-        <span class="stat-label">Congressi ${calYear}</span>
+        <span class="stat-label">Congressi a.a. ${ay.label}</span>
         <span class="stat-value">${cA + cP}<small> giorni</small></span>
         <div class="meter"><span style="width:0"></span></div>
         <span class="stat-sub">${cA} approvati · ${cP} in attesa · nessun limite</span>
@@ -341,12 +345,12 @@ function renderRep(year) {
   const residents = residentsOf(year);
   const dates = D.monthDates(ui.y, ui.m);
   const monthPrefix = dates[0].slice(0, 7);
-  const calYear = String(ui.y);
+  const ay = viewAcademicYear();
   const overlapDates = dates.filter((d) => (idx.byDate.get(d) || []).length >= 2);
   const overlapSet = new Set(overlapDates);
   const pendingMonth = idx.all.filter((e) => e.status === "pending" && e.date.startsWith(monthPrefix));
   const pendingClean = pendingMonth.filter((e) => !overlapSet.has(e.date));
-  const overLimit = residents.filter((r) => countDays(year.id, r.id, "ferie", calYear, ["approved", "pending"]) > FERIE_LIMIT);
+  const overLimit = residents.filter((r) => countDays(year.id, r.id, "ferie", ay, ["approved", "pending"]) > FERIE_LIMIT);
   const today = D.todayIso();
 
   // Tabella mensile
@@ -370,15 +374,15 @@ function renderRep(year) {
       const title = `${r.name} · ${D.fmtDay(date)}\n${TYPE_LABEL[e.type]} – ${STATUS_LABEL[e.status]}${e.note ? `\n${e.note}` : ""}\nClic: ${STATUS_LABEL[NEXT_STATUS[e.status]].toLowerCase()}`;
       return `<td class="${colCls(date)}"><button type="button" class="cell ${e.type} ${e.status}" data-cell="${esc(e.id)}" title="${esc(title)}" aria-label="${esc(title)}">${e.type === "ferie" ? "F" : "C"}</button></td>`;
     }).join("");
-    const fA = countDays(year.id, r.id, "ferie", calYear, ["approved"]);
-    const fP = countDays(year.id, r.id, "ferie", calYear, ["pending"]);
-    const cTot = countDays(year.id, r.id, "congresso", calYear, ["approved", "pending"]);
+    const fA = countDays(year.id, r.id, "ferie", ay, ["approved"]);
+    const fP = countDays(year.id, r.id, "ferie", ay, ["pending"]);
+    const cTot = countDays(year.id, r.id, "congresso", ay, ["approved", "pending"]);
     const rowPending = pendingMonth.filter((e) => e.residentId === r.id).length;
     const over = fA + fP > FERIE_LIMIT;
     return `<tr>
       <th class="sticky name" scope="row">${esc(r.name)}</th>
       ${cells}
-      <td class="tot ${over ? "over" : ""}" title="Ferie ${calYear}: ${fA} approvate, ${fP} in attesa">${fA}${fP ? `<small>+${fP}</small>` : ""}${over ? " ⚠" : ""}</td>
+      <td class="tot ${over ? "over" : ""}" title="Ferie a.a. ${ay.label}: ${fA} approvate, ${fP} in attesa">${fA}${fP ? `<small>+${fP}</small>` : ""}${over ? " ⚠" : ""}</td>
       <td class="tot">${cTot}</td>
       <td class="row-act">${rowPending ? `<button type="button" class="btn tiny" data-action="approve-row" data-rid="${esc(r.id)}" title="Approva le ${rowPending} richieste in attesa di questo mese">✓ ${rowPending}</button>` : ""}</td>
     </tr>`;
@@ -391,7 +395,7 @@ function renderRep(year) {
 
   const table = residents.length
     ? `<div class="table-wrap"><table class="grid">
-        <thead><tr><th class="sticky name">Specializzando</th>${headCells}<th class="tot" title="Ferie nell'anno solare: approvate (+ in attesa)">Ferie ${calYear}</th><th class="tot" title="Giorni di congresso nell'anno solare">Congr.</th><th></th></tr></thead>
+        <thead><tr><th class="sticky name">Specializzando</th>${headCells}<th class="tot" title="Ferie nell'anno accademico ${ay.label}: approvate (+ in attesa)">Ferie ${ay.label}</th><th class="tot" title="Giorni di congresso nell'anno accademico ${ay.label}">Congr.</th><th></th></tr></thead>
         <tbody>${bodyRows}${countRow}</tbody>
       </table></div>
       <p class="muted small">Clic su una cella per cambiare stato: in attesa → approvato → rifiutato. Le colonne arancioni indicano giorni in cui più colleghi sono assenti.</p>`
@@ -430,10 +434,10 @@ function renderRep(year) {
       <div class="kpis">
         <div class="kpi"><span>${pendingMonth.length}</span>richieste in attesa nel mese</div>
         <div class="kpi ${overlapDates.length ? "warn" : ""}"><span>${overlapDates.length}</span>giorni con sovrapposizioni</div>
-        <div class="kpi ${overLimit.length ? "danger" : ""}"><span>${overLimit.length}</span>oltre ${FERIE_LIMIT} gg di ferie (${calYear})</div>
+        <div class="kpi ${overLimit.length ? "danger" : ""}"><span>${overLimit.length}</span>oltre ${FERIE_LIMIT} gg di ferie (a.a. ${ay.label})</div>
         <div class="kpi"><span>${residents.length}</span>specializzandi</div>
       </div>
-      ${overLimit.length ? `<div class="alert danger">Superano i ${FERIE_LIMIT} giorni di ferie nel ${calYear} (approvati + in attesa): ${overLimit.map((r) => `<strong>${esc(r.name)}</strong> (${countDays(year.id, r.id, "ferie", calYear, ["approved", "pending"])})`).join(", ")}.</div>` : ""}
+      ${overLimit.length ? `<div class="alert danger">Superano i ${FERIE_LIMIT} giorni di ferie nell'a.a. ${ay.label} (approvati + in attesa): ${overLimit.map((r) => `<strong>${esc(r.name)}</strong> (${countDays(year.id, r.id, "ferie", ay, ["approved", "pending"])})`).join(", ")}.</div>` : ""}
       <div class="bulk">
         <button type="button" class="btn primary" data-action="approve-clean" ${pendingClean.length ? "" : "disabled"}>Approva le richieste senza sovrapposizioni (${pendingClean.length})</button>
         <button type="button" class="btn" data-action="approve-month" ${pendingMonth.length ? "" : "disabled"}>Approva tutte le richieste del mese (${pendingMonth.length})</button>
@@ -443,12 +447,12 @@ function renderRep(year) {
     ${card(`<h3>Sovrapposizioni · ${D.monthLabel(ui.y, ui.m)}</h3>${conflicts}`, "conflicts")}
     ${card(`
       <h3>Scarica riepilogo</h3>
-      <p class="muted">Documento con i soli giorni <strong>approvati</strong> per ogni specializzando del ${esc(year.label)}, con il totale ferie dell'anno e l'avviso di superamento dei ${FERIE_LIMIT} giorni.</p>
+      <p class="muted">Documento con i soli giorni <strong>approvati</strong> per ogni specializzando del ${esc(year.label)}, con il totale ferie dell'anno accademico e l'avviso di superamento dei ${FERIE_LIMIT} giorni.</p>
       <div class="form-row">
         <label class="field"><span>Periodo</span>
           <select id="export-period" data-keep="exp-period">
             <option value="month">${D.monthLabel(ui.y, ui.m)}</option>
-            <option value="year">Anno solare ${ui.y}</option>
+            <option value="year">Anno accademico ${ay.label} (1 nov – 31 ott)</option>
           </select>
         </label>
         <button type="button" class="btn primary" data-action="export-pdf">Scarica PDF</button>
@@ -503,13 +507,14 @@ async function toggleDay(date) {
   if (ex?.status === "approved" &&
       !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Cambiandolo, la richiesta tornerà in attesa di approvazione. Continuare?`)) return;
   const entry = { id, yearId: year.id, residentId: rid, date, type: ui.brush, status: "pending", note: "", updatedAt: Date.now() };
-  if (await act(() => store.saveEntries([entry]))) warnFerie(year, rid, date.slice(0, 4), entry.type);
+  if (await act(() => store.saveEntries([entry]))) warnFerie(year, rid, date, entry.type);
 }
 
-function warnFerie(year, rid, calYear, type) {
+function warnFerie(year, rid, date, type) {
   if (type !== "ferie") return;
-  const n = countDays(year.id, rid, "ferie", calYear, ["approved", "pending"]);
-  if (n > FERIE_LIMIT) toast(`Attenzione: ${n} giorni di ferie nel ${calYear}, oltre il limite di ${FERIE_LIMIT}.`, "warn");
+  const ay = D.academicYear(date);
+  const n = countDays(year.id, rid, "ferie", ay, ["approved", "pending"]);
+  if (n > FERIE_LIMIT) toast(`Attenzione: ${n} giorni di ferie nell'a.a. ${ay.label}, oltre il limite di ${FERIE_LIMIT}.`, "warn");
 }
 
 async function submitRange(form) {
@@ -544,7 +549,7 @@ async function submitRange(form) {
   ui.y = Number(from.slice(0, 4));
   ui.m = Number(from.slice(5, 7)) - 1;
   if (await act(() => store.saveEntries(list), `${list.length} giorni di ${TYPE_LABEL[type].toLowerCase()} richiesti.`)) {
-    warnFerie(year, rid, from.slice(0, 4), type);
+    warnFerie(year, rid, to, type);
     render();
   }
 }
@@ -556,13 +561,14 @@ async function setStatus(year, entries, status) {
     const add = {};
     for (const e of entries)
       if (e.type === "ferie" && e.status !== "approved") {
-        const k = `${e.residentId}|${e.date.slice(0, 4)}`;
+        const k = `${e.residentId}|${D.academicYear(e.date).from}`;
         add[k] = (add[k] || 0) + 1;
       }
     const warnings = Object.entries(add).flatMap(([k, n]) => {
-      const [rid, y] = k.split("|");
-      const tot = countDays(year.id, rid, "ferie", y, ["approved"]) + n;
-      return tot > FERIE_LIMIT ? [`• ${nameOf(year, rid)}: ${tot} giorni di ferie approvati nel ${y}`] : [];
+      const [rid, from] = k.split("|");
+      const ay = D.academicYear(from);
+      const tot = countDays(year.id, rid, "ferie", ay, ["approved"]) + n;
+      return tot > FERIE_LIMIT ? [`• ${nameOf(year, rid)}: ${tot} giorni di ferie approvati nell'a.a. ${ay.label}`] : [];
     });
     if (warnings.length &&
         !confirm(`Attenzione: superamento del limite di ${FERIE_LIMIT} giorni di ferie.\n\n${warnings.join("\n")}\n\nApprovare comunque?`)) return;
@@ -574,7 +580,10 @@ async function setStatus(year, entries, status) {
 
 function exportPeriod() {
   const kind = $("#export-period")?.value || "month";
-  if (kind === "year") return { from: `${ui.y}-01-01`, to: `${ui.y}-12-31`, label: `Anno ${ui.y}` };
+  if (kind === "year") {
+    const ay = viewAcademicYear();
+    return { from: ay.from, to: ay.to, label: `Anno accademico ${ay.label}` };
+  }
   const dates = D.monthDates(ui.y, ui.m);
   return { from: dates[0], to: dates[dates.length - 1], label: D.monthLabel(ui.y, ui.m) };
 }

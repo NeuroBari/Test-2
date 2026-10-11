@@ -1,5 +1,7 @@
 // Utility per le date. Le date sono sempre stringhe "YYYY-MM-DD" (ora locale).
 
+import { ACADEMIC_YEAR_START_MONTH } from "./config.js";
+
 export const MONTHS = [
   "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
   "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
@@ -124,4 +126,21 @@ export function fmtRange(from, to) {
   if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear())
     return `${a.getDate()}–${b.getDate()} ${MON3[b.getMonth()]}`;
   return `${a.getDate()} ${MON3[a.getMonth()]} – ${b.getDate()} ${MON3[b.getMonth()]}`;
+}
+
+/**
+ * Anno accademico che contiene la data (es. 1 nov 2025 – 31 ott 2026).
+ * Restituisce { from, to, label } con label "2025/26".
+ */
+export function academicYear(date) {
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  const sm = ACADEMIC_YEAR_START_MONTH;
+  const start = m >= sm ? y : y - 1;
+  if (sm === 1) return { from: `${start}-01-01`, to: `${start}-12-31`, label: String(start) };
+  return {
+    from: iso(start, sm - 1, 1),
+    to: addDays(iso(start + 1, sm - 1, 1), -1),
+    label: `${start}/${String((start + 1) % 100).padStart(2, "0")}`,
+  };
 }

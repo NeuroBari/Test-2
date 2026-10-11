@@ -29,12 +29,12 @@ const byName = (a, b) => a.name.localeCompare(b.name, "it", { sensitivity: "base
  * entries: tutte le richieste dell'anno di corso.
  */
 export function buildReport({ year, entries, from, to, limit }) {
-  const calYear = from.slice(0, 4);
+  const ay = D.academicYear(from);
   const rows = [...year.residents].sort(byName).map((r) => {
     const mine = entries.filter((e) => e.residentId === r.id);
     const approved = mine.filter((e) => e.status === "approved");
     const inPeriod = approved.filter((e) => e.date >= from && e.date <= to);
-    const ferieYear = approved.filter((e) => e.type === "ferie" && e.date.startsWith(calYear)).length;
+    const ferieYear = approved.filter((e) => e.type === "ferie" && e.date >= ay.from && e.date <= ay.to).length;
     return {
       name: r.name,
       ferie: inPeriod.filter((e) => e.type === "ferie"),
@@ -44,7 +44,7 @@ export function buildReport({ year, entries, from, to, limit }) {
       pending: mine.filter((e) => e.status === "pending" && e.date >= from && e.date <= to).length,
     };
   });
-  return { calYear, rows };
+  return { ay, rows };
 }
 
 const noteKey = (e) => e.note || "";
@@ -80,10 +80,10 @@ export async function exportPdf({ year, report, period, limit }) {
   doc.text(`Generato il ${now.toLocaleDateString("it-IT")} alle ${now.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`, 14, 35);
   doc.setTextColor(0);
 
-  const { rows, calYear } = report;
+  const { rows, ay } = report;
   doc.autoTable({
     startY: 41,
-    head: [["Specializzando", "Ferie approvate", "gg", "Congressi approvati", "gg", `Ferie ${calYear}\n(tot. approvate)`]],
+    head: [["Specializzando", "Ferie approvate", "gg", "Congressi approvati", "gg", `Ferie a.a.\n${ay.label}\n(tot. approvate)`]],
     body: rows.map((r) => [
       r.name,
       rangesText(r.ferie),
@@ -115,7 +115,7 @@ export async function exportPdf({ year, report, period, limit }) {
   notes.push("Sono riportati esclusivamente i giorni approvati dal rappresentante.");
   const over = rows.filter((r) => r.over);
   if (over.length)
-    notes.push(`Attenzione - superato il limite di ${limit} giorni di ferie nel ${calYear}: ${over.map((r) => `${r.name} (${r.ferieYear})`).join(", ")}.`);
+    notes.push(`Attenzione - superato il limite di ${limit} giorni di ferie nell'a.a. ${ay.label}: ${over.map((r) => `${r.name} (${r.ferieYear})`).join(", ")}.`);
   const pending = rows.reduce((s, r) => s + r.pending, 0);
   if (pending) notes.push(`Nel periodo restano ${pending} giorni richiesti in attesa di approvazione (non inclusi).`);
   for (const n of notes) {
@@ -127,13 +127,15 @@ export async function exportPdf({ year, report, period, limit }) {
   // Dettaglio mese per mese (solo per periodi più lunghi di un mese)
   if (period.from.slice(0, 7) !== period.to.slice(0, 7)) {
     const body = [];
-    for (let m = 0; m < 12; m++) {
-      const prefix = `${calYear}-${String(m + 1).padStart(2, "0")}`;
+    const start = D.parse(period.from);
+    for (let dt = new Date(start.getFullYear(), start.getMonth(), 1); D.toIso(dt) <= period.to; dt.setMonth(dt.getMonth() + 1)) {
+      const prefix = D.toIso(dt).slice(0, 7);
+      const monthName = D.monthLabel(dt.getFullYear(), dt.getMonth());
       for (const r of rows) {
         const f = r.ferie.filter((e) => e.date.startsWith(prefix));
         const c = r.congressi.filter((e) => e.date.startsWith(prefix));
         if (!f.length && !c.length) continue;
-        body.push([D.capitalize(D.MONTHS[m]), r.name, f.length ? `${rangesText(f)} (${f.length} gg)` : "—", c.length ? `${rangesText(c, true)} (${c.length} gg)` : "—"]);
+        body.push([monthName, r.name, f.length ? `${rangesText(f)} (${f.length} gg)` : "—", c.length ? `${rangesText(c, true)} (${c.length} gg)` : "—"]);
       }
     }
     if (body.length) {

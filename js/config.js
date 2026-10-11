@@ -16,9 +16,13 @@ export const FIREBASE_CONFIG = {
   appId: "",
 };
 
-// Limite di giorni di ferie per anno solare (oltre questa soglia viene
+// Limite di giorni di ferie per anno accademico (oltre questa soglia viene
 // mostrato un avviso). Per i congressi non c'è limite.
 export const FERIE_LIMIT = 30;
+
+// Mese di inizio dell'anno accademico (1 = gennaio … 11 = novembre).
+// Con 11 l'anno accademico va dal 1° novembre al 31 ottobre successivo.
+export const ACADEMIC_YEAR_START_MONTH = 11;
 
 // Anni di corso creati al primo avvio (altri possono essere aggiunti
 // dall'area rappresentante).
