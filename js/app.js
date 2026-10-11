@@ -3,6 +3,7 @@ import { FERIE_LIMIT, COURSE_YEARS, ACADEMIC_YEAR_START_MONTH } from "./config.j
 import * as D from "./dates.js";
 import { buildReport, exportPdf, exportCsv } from "./export.js";
 import { parseRotationsFile, guessResident, monthKey, normName } from "./rotations.js";
+import { setupPwa } from "./pwa.js";
 
 const TYPE_LABEL = { ferie: "Ferie", congresso: "Congresso" };
 const STATUS_LABEL = { pending: "In attesa", approved: "Approvato", rejected: "Rifiutato" };
@@ -1084,6 +1085,7 @@ function wire() {
 // Avvio
 // ---------------------------------------------------------------------------
 (async function init() {
+  setupPwa();
   wire();
   try {
     store = await createStore((data) => {
