@@ -431,6 +431,35 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .rot-details summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 .rot-grid td { padding: 0 6px; white-space: nowrap; font-size: .72rem; }
 
+/* ---------- Rappresentante: novità, filtro per reparto, panoramica annuale ---------- */
+.news { border-left: 4px solid var(--accent); }
+.news-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.news-head h3 { margin-bottom: 6px; }
+.news p { margin: 0 0 6px; }
+.news-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip { font: inherit; font-size: .85rem; font-weight: 600; padding: 5px 12px; min-height: 34px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.chip span { color: var(--muted); font-weight: 500; margin-left: 2px; }
+.chip.active { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.chip.active span { color: inherit; opacity: .8; }
+.grid.annual td { padding: 3px; min-width: 40px; }
+.hm { display: grid; place-items: center; height: 26px; border-radius: 6px; font-weight: 700; font-size: .78rem; font-variant-numeric: tabular-nums; }
+.hm.l1 { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--text); }
+.hm.l2 { background: color-mix(in srgb, var(--primary) 32%, var(--surface)); color: var(--text); }
+.hm.l3 { background: color-mix(in srgb, var(--primary) 58%, var(--surface)); color: #fff; }
+.hm.l4 { background: var(--primary); color: var(--primary-ink); }
+.legend .hm { width: 16px; height: 16px; border-radius: 4px; display: inline-block; }
+.month-link { font: inherit; font-weight: 700; text-transform: capitalize; border: 0; background: none; color: var(--text); cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.month-link:hover { background: var(--surface); }
+.month-link.current { box-shadow: inset 0 -2px 0 var(--accent); }
+.use { white-space: nowrap; padding: 0 10px; font-weight: 700; font-variant-numeric: tabular-nums; font-size: .8rem; }
+.use.over { color: var(--danger); }
+.usebar { display: inline-block; width: 46px; height: 6px; border-radius: 6px; background: var(--surface-2); margin-right: 6px; vertical-align: middle; overflow: hidden; }
+.usebar span { display: block; height: 100%; background: var(--ferie); }
+.use.over .usebar span { background: var(--danger); }
+.ov { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--overlap-soft); color: var(--overlap); font-size: .72rem; font-weight: 700; font-style: normal; }
+.ov.high { background: var(--danger); color: #fff; }
+
 /* ---------- Commenti ---------- */
 textarea { width: 100%; resize: vertical; line-height: 1.4; }
 .form-row.end { justify-content: flex-end; }

@@ -478,7 +478,24 @@ function renderRep(year) {
     return `<th class="${colCls(date)}" title="${esc(title)}">${Number(date.slice(8))}<small>${D.WD1[D.weekday(date)]}</small></th>`;
   }).join("");
 
-  const bodyRows = residents.map((r) => {
+  // Filtro per reparto (dai turni del mese)
+  const repOptions = new Map();
+  for (const r of residents) {
+    const rot = rotationOf(year, r.id, dates[0]);
+    if (!rot) continue;
+    const k = normName(rot);
+    repOptions.set(k, { label: rot, n: (repOptions.get(k)?.n || 0) + 1 });
+  }
+  if (ui.repFilter && !repOptions.has(ui.repFilter)) ui.repFilter = "";
+  const shownResidents = ui.repFilter ? residents.filter((r) => normName(rotationOf(year, r.id, dates[0])) === ui.repFilter) : residents;
+  const filterChips = repOptions.size
+    ? `<div class="chips" role="group" aria-label="Filtra per reparto">
+        <button type="button" class="chip ${ui.repFilter ? "" : "active"}" data-action="rep-filter" data-key="" aria-pressed="${!ui.repFilter}">Tutti <span>${residents.length}</span></button>
+        ${[...repOptions].sort((a, b) => a[1].label.localeCompare(b[1].label, "it")).map(([k, o]) => `<button type="button" class="chip ${ui.repFilter === k ? "active" : ""}" data-action="rep-filter" data-key="${esc(k)}" aria-pressed="${ui.repFilter === k}">${esc(o.label)} <span>${o.n}</span></button>`).join("")}
+      </div>`
+    : "";
+
+  const bodyRows = shownResidents.map((r) => {
     const cells = dates.map((date) => {
       const e = state.entries[entryId(year.id, r.id, date)];
       if (!e) return `<td class="${colCls(date)}"></td>`;
@@ -559,8 +576,10 @@ function renderRep(year) {
         <button type="button" class="btn" data-action="approve-month" ${pendingMonth.length ? "" : "disabled"}>Approva tutte le richieste del mese (${pendingMonth.length})</button>
       </div>
     `)}
-    ${card(`<h3>${D.monthLabel(ui.y, ui.m)}</h3>${table}${legendHtml()}`)}
+    ${repNewsHtml(year, idx)}
+    ${card(`<h3>${D.monthLabel(ui.y, ui.m)}</h3>${filterChips}${table}${legendHtml()}`)}
     ${card(`<h3>Sovrapposizioni · ${D.monthLabel(ui.y, ui.m)}</h3>${conflicts}`, "conflicts")}
+    ${card(annualHtml(year, idx, residents, ay), "annual")}
     ${card(repRotationsHtml(year, residents, ay), "rotations")}
     ${year.commentsEnabled ? card(repCommentsHtml(year, residents, ay), "comments") : ""}
     ${card(`
@@ -609,6 +628,77 @@ function renderRep(year) {
       </div>
     `)}
   `);
+}
+
+// Novità dall'ultimo accesso del rappresentante (memorizzato su questo dispositivo)
+const seenKey = (year) => `rep-seen-${year.id}`;
+function lastSeen(year) {
+  try { return Number(localStorage.getItem(seenKey(year))) || 0; } catch { return 0; }
+}
+
+function repNewsHtml(year, idx) {
+  const since = lastSeen(year);
+  const fresh = idx.all.filter((e) => e.status === "pending" && (e.updatedAt || 0) > since);
+  if (!fresh.length) return "";
+  const byRes = new Map();
+  for (const e of fresh) {
+    if (!byRes.has(e.residentId)) byRes.set(e.residentId, []);
+    byRes.get(e.residentId).push(e);
+  }
+  const sharedDays = new Set(fresh.filter((e) => sharedRotations(year, idx.byDate.get(e.date) || [], e.date).length).map((e) => e.date));
+  const items = [...byRes].map(([rid, list]) => `<li><strong>${esc(nameOf(year, rid))}</strong> · ${
+    D.groupRanges(list, (e) => e.type).map((g) => `${TYPE_LABEL[g.items[0].type]} ${D.fmtRange(g.from, g.to)}`).join(", ")}</li>`).join("");
+  return card(`
+    <div class="news-head">
+      <h3>Novità ${since ? `dal tuo ultimo accesso <span class="muted small">(${new Date(since).toLocaleDateString("it-IT", { day: "numeric", month: "short" })})</span>` : "da approvare"}</h3>
+      <button type="button" class="btn tiny ghost" data-action="news-seen">Segna come viste</button>
+    </div>
+    <p><strong>${fresh.length}</strong> ${fresh.length === 1 ? "nuovo giorno richiesto" : "nuovi giorni richiesti"} da <strong>${byRes.size}</strong> ${byRes.size === 1 ? "specializzando" : "specializzandi"}${sharedDays.size ? ` · <span class="danger-text"><strong>${sharedDays.size}</strong> ${sharedDays.size === 1 ? "giorno" : "giorni"} con colleghi dello stesso reparto</span>` : ""}</p>
+    <ul class="news-list">${items}</ul>`, "news");
+}
+
+// Panoramica dell'anno accademico: giorni di assenza per specializzando e per mese
+function annualHtml(year, idx, residents, ay) {
+  const months = D.rangeDates(ay.from, ay.to).filter((d) => d.endsWith("-01")).map((d) => d.slice(0, 7));
+  const viewed = `${ui.y}-${String(ui.m + 1).padStart(2, "0")}`;
+  const count = new Map();
+  for (const e of idx.all) {
+    if (e.status === "rejected") continue;
+    const k = `${e.residentId}|${e.date.slice(0, 7)}`;
+    const c = count.get(k) || { f: 0, c: 0 };
+    if (e.type === "ferie") c.f++; else c.c++;
+    count.set(k, c);
+  }
+  const level = (n) => (n === 0 ? 0 : n <= 2 ? 1 : n <= 5 ? 2 : n <= 9 ? 3 : 4);
+  const monthStats = months.map((m) => {
+    let overlaps = 0, high = 0;
+    for (const [date, list] of idx.byDate) {
+      if (!date.startsWith(m) || list.length < 2) continue;
+      overlaps++;
+      if (sharedRotations(year, list, date).length) high++;
+    }
+    return { overlaps, high };
+  });
+  const monthName = (m) => D.capitalize(D.MONTHS[Number(m.slice(5)) - 1]);
+  const rows = residents.map((r) => {
+    const used = countDays(year.id, r.id, "ferie", ay, ["approved", "pending"]);
+    return `<tr><th class="sticky name" scope="row">${esc(r.name)}</th>${months.map((m) => {
+      const c = count.get(`${r.id}|${m}`) || { f: 0, c: 0 };
+      const n = c.f + c.c;
+      return `<td><span class="hm l${level(n)}" title="${esc(`${r.name} · ${monthName(m)}: ${c.f} ferie, ${c.c} congressi`)}">${n || ""}</span></td>`;
+    }).join("")}<td class="use ${used > FERIE_LIMIT ? "over" : ""}" title="Ferie a.a. ${ay.label} (approvate + in attesa)"><span class="usebar"><span style="width:${Math.min(100, (used / FERIE_LIMIT) * 100)}%"></span></span>${used}/${FERIE_LIMIT}</td></tr>`;
+  }).join("");
+  return `
+    <h3>Panoramica a.a. ${ay.label}</h3>
+    <p class="muted small">Giorni di assenza per mese (ferie + congressi, esclusi i rifiutati). Tocca un mese per aprirlo.</p>
+    ${residents.length ? `<div class="table-wrap"><table class="grid annual">
+      <thead><tr><th class="sticky name">Specializzando</th>${months.map((m) => `<th><button type="button" class="month-link ${m === viewed ? "current" : ""}" data-action="goto-month" data-ym="${m}" title="Apri ${monthName(m)}">${D.MON3[Number(m.slice(5)) - 1]}</button></th>`).join("")}<th class="use-h">Ferie</th></tr></thead>
+      <tbody>${rows}
+        <tr class="count-row"><th class="sticky name" scope="row">Sovrapposizioni</th>${monthStats.map((s) => `<td>${s.overlaps ? `<span class="ov ${s.high ? "high" : ""}" title="${s.overlaps} giorni con più assenti${s.high ? `, ${s.high} nello stesso reparto` : ""}">${s.overlaps}</span>` : ""}</td>`).join("")}<td></td></tr>
+      </tbody>
+    </table></div>
+    <div class="legend"><span><i class="hm l1"></i>1–2 gg</span><span><i class="hm l2"></i>3–5</span><span><i class="hm l3"></i>6–9</span><span><i class="hm l4"></i>10+</span><span><i class="ov">n</i>giorni sovrapposti</span><span><i class="ov high">n</i>stesso reparto</span></div>`
+    : `<p class="muted">Nessuno specializzando inserito.</p>`}`;
 }
 
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, (c) => c.toUpperCase());
@@ -1001,6 +1091,17 @@ function wire() {
         }, "Specializzando rimosso.");
         return;
       }
+      case "rep-filter":
+        ui.repFilter = btn.dataset.key;
+        return render();
+      case "goto-month":
+        ui.y = Number(btn.dataset.ym.slice(0, 4));
+        ui.m = Number(btn.dataset.ym.slice(5, 7)) - 1;
+        render();
+        return document.querySelector("#view-rep .grid")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      case "news-seen":
+        try { localStorage.setItem(seenKey(year), String(Date.now())); } catch { /* ignorato */ }
+        return render();
       case "rot-cancel":
         ui.rotDraft = null;
         return render();
