@@ -77,7 +77,8 @@ Il piano gratuito Spark consente 50.000 letture e 20.000 scritture al giorno e 1
 
 ```
 index.html        pagina
-css/style.css     stile (chiaro/scuro, responsive)
+css/style.css     stile "Fusione" (mare dell'Adriatico + pietra di Bari), chiaro/scuro, responsive
+img/logo.svg      logo "Neurone sul mare" (originale, non è un marchio dell'università)
 js/config.js      configurazione Firebase, limite ferie, durata della scuola
 js/app.js         interfaccia e logica
 js/store.js       salvataggio dati (Firestore o localStorage)

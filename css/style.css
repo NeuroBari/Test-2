@@ -1,12 +1,20 @@
+/* Identità "Fusione": il mare dell'Adriatico in alto, la pietra calcarea di Bari sotto, dettagli ocra */
 :root {
-  --bg: #f4f6fa;
-  --surface: #ffffff;
-  --surface-2: #f0f3f8;
-  --border: #dde3ec;
-  --text: #1a2233;
-  --muted: #5f6b82;
-  --primary: #2563eb;
+  --bg: #f4eee4;
+  --surface: #fffdf8;
+  --surface-2: #efe6d8;
+  --border: #e2d6c3;
+  --text: #1c2a40;
+  --muted: #776b5c;
+  --primary: #0b5394;
   --primary-ink: #ffffff;
+  --accent: #c0822e;
+  --header-from: #0a4a85;
+  --header-to: #0e6fb3;
+  --header-ink: #ffffff;
+  --header-muted: #d3e4f4;
+  --font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
 
   --ferie: #0d9488;
   --ferie-soft: #d4f2ee;
@@ -19,26 +27,30 @@
   --warn-soft: #fef3c7;
   --danger: #dc2626;
   --danger-soft: #fee2e2;
-  --overlap: #ea580c;
-  --overlap-soft: #ffedd5;
-  --weekend: #f6f7fb;
-  --holiday: #fdf2f2;
+  --overlap: #c0822e;
+  --overlap-soft: #f6e7cc;
+  --weekend: #f6f0e6;
+  --holiday: #fbecea;
 
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 2px 8px rgba(16, 24, 40, .06);
+  --shadow: 0 1px 0 rgba(28, 42, 64, .05), 0 6px 18px rgba(120, 96, 60, .08);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1420;
-    --surface: #171d2b;
-    --surface-2: #1f2737;
-    --border: #2b354a;
-    --text: #e6eaf2;
-    --muted: #97a3ba;
-    --primary: #5b8cff;
-    --primary-ink: #0b1020;
+    --bg: #11161f;
+    --surface: #1a202b;
+    --surface-2: #232a37;
+    --border: #313b4c;
+    --text: #ece7dd;
+    --muted: #a69e91;
+    --primary: #6aa6e8;
+    --primary-ink: #0b1424;
+    --accent: #d9a24a;
+    --header-from: #072746;
+    --header-to: #0b4479;
+    --header-muted: #a9c3dd;
     --ferie: #2dd4bf;
     --ferie-soft: #12403b;
     --congr: #a78bfa;
@@ -49,10 +61,10 @@
     --warn-soft: #3a2c0b;
     --danger: #f87171;
     --danger-soft: #431818;
-    --overlap: #fb923c;
-    --overlap-soft: #40220e;
-    --weekend: #141a27;
-    --holiday: #2a1820;
+    --overlap: #e9a646;
+    --overlap-soft: #3d2b10;
+    --weekend: #161c26;
+    --holiday: #2a1a1e;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3);
     color-scheme: dark;
   }
@@ -64,10 +76,10 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font: 16px/1.45 var(--font-body);
 }
 
-h1, h2, h3 { margin: 0; line-height: 1.2; }
+h1, h2, h3 { margin: 0; line-height: 1.2; font-family: var(--font-display); font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
 h2 { font-size: 1.2rem; }
 h3 { font-size: 1.05rem; margin-bottom: .75rem; }
 .muted { color: var(--muted); }
@@ -81,26 +93,43 @@ h3 { font-size: 1.05rem; margin-bottom: .75rem; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  padding: 16px 16px 36px;
+  background: linear-gradient(135deg, var(--header-from) 0%, var(--header-to) 100%);
+  color: var(--header-ink);
+  position: relative;
+  overflow: hidden;
 }
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand h1 { font-size: 1.15rem; }
-.brand p { margin: 0; color: var(--muted); font-size: .85rem; }
-.logo {
-  font-size: 1.6rem;
-  width: 44px; height: 44px;
-  display: grid; place-items: center;
-  border-radius: 12px;
-  background: var(--surface-2);
+/* L'onda dell'Adriatico che sfuma nella "pietra" della pagina */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 22px;
+  background: var(--bg);
+  pointer-events: none;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 22 C 150 2 300 42 450 22 S 750 2 900 22 S 1150 40 1200 20 L1200 40 L0 40 Z'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 22 C 150 2 300 42 450 22 S 750 2 900 22 S 1150 40 1200 20 L1200 40 L0 40 Z'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat;
 }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand h1 { font-size: 1.35rem; color: var(--header-ink); }
+.brand p { margin: 2px 0 0; color: var(--header-muted); font-size: .85rem; max-width: 46ch; }
+.logo { width: 48px; height: 48px; flex: none; border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.place {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 10px; border-radius: 999px;
+  color: var(--header-ink); text-decoration: none; line-height: 1.15;
+  background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .3);
+}
+.place:hover { background: rgba(255, 255, 255, .22); }
+.place strong { display: block; font-size: .85rem; }
+.place small { display: block; font-size: .72rem; color: var(--header-muted); }
 .mode-badge { font-size: .8rem; padding: 4px 10px; border-radius: 999px; white-space: nowrap; cursor: help; }
 .mode-badge.online { background: var(--ok-soft); color: var(--ok); }
 .mode-badge.local { background: var(--warn-soft); color: var(--warn); }
+/* Sull'intestazione blu (uguale in tema chiaro e scuro) i colori sono fissi */
+.topbar .mode-badge.online { background: #e7f8ee; color: #166534; }
+.topbar .mode-badge.local { background: #fff4e0; color: #8a4b00; }
 
 .container {
   max-width: 1200px;
@@ -180,7 +209,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   gap: 12px;
 }
 .month-nav { display: flex; align-items: center; gap: 8px; }
-.month-nav strong { min-width: 150px; text-align: center; font-size: 1.1rem; }
+.month-nav strong { min-width: 150px; text-align: center; font-size: 1.15rem; font-family: var(--font-display); }
 .tabs { display: flex; background: var(--surface-2); padding: 4px; border-radius: 12px; }
 .tabs button {
   font: inherit;
@@ -193,7 +222,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   cursor: pointer;
   min-height: 36px;
 }
-.tabs button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tabs button.active { background: var(--surface); color: var(--primary); box-shadow: inset 0 -2px 0 var(--accent), var(--shadow); }
 
 /* ---------- Alert / stats ---------- */
 .alert { padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; }
@@ -214,7 +243,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   gap: 6px;
 }
 .stat-label { font-size: .85rem; color: var(--muted); font-weight: 600; }
-.stat-value { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-value { font-family: var(--font-display); font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat-value small { font-size: .9rem; color: var(--muted); font-weight: 500; }
 .stat-sub { font-size: .82rem; color: var(--muted); }
 .meter { height: 6px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
@@ -264,10 +293,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .day.blank { border: 0; background: transparent; cursor: default; }
 .day.weekend { background: var(--weekend); }
 .day.holiday { background: var(--holiday); }
-.day.today .day-num { background: var(--primary); color: var(--primary-ink); border-radius: 999px; padding: 0 7px; }
+.day.today .day-num { background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; }
 .day-num { font-weight: 700; font-size: .95rem; }
 .day.weekend .day-num, .day.holiday .day-num { color: var(--muted); }
-.day.today .day-num { color: var(--primary-ink); }
+.day.today .day-num { color: #fff; }
 .day-hol { font-size: .68rem; color: var(--danger); line-height: 1.1; }
 .day.has.ferie { border-color: var(--ferie); }
 .day.has.congresso { border-color: var(--congr); }
@@ -451,6 +480,12 @@ textarea { width: 100%; resize: vertical; line-height: 1.4; }
   .others { font-size: .62rem; }
   .conflict { grid-template-columns: 1fr; gap: 4px; }
   .brand p { display: none; }
+  .brand h1 { font-size: 1.1rem; }
+  .logo { width: 42px; height: 42px; border-radius: 12px; }
+  .topbar { padding-bottom: 32px; }
+  .place { padding: 5px 10px; }
+  .place small, .topbar .mode-badge { display: none; }
+  .place strong { font-size: .78rem; }
 }
 
 @media print {

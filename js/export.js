@@ -66,7 +66,7 @@ export async function exportPdf({ year, report, period, limit, comments = null }
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const blue = [37, 99, 235];
+  const blue = [11, 83, 148];
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
@@ -74,15 +74,16 @@ export async function exportPdf({ year, report, period, limit, comments = null }
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(80);
-  doc.text(`Scuola di Specializzazione in Neurologia - ${year.label}`, 14, 25);
-  doc.text(`Periodo: ${period.label}`, 14, 30);
+  doc.text("Università degli Studi di Bari Aldo Moro", 14, 25);
+  doc.text(`Scuola di Specializzazione in Neurologia - ${year.label}`, 14, 30);
+  doc.text(`Periodo: ${period.label}`, 14, 35);
   const now = new Date();
-  doc.text(`Generato il ${now.toLocaleDateString("it-IT")} alle ${now.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`, 14, 35);
+  doc.text(`Generato il ${now.toLocaleDateString("it-IT")} alle ${now.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`, 14, 40);
   doc.setTextColor(0);
 
   const { rows, ay } = report;
   doc.autoTable({
-    startY: 41,
+    startY: 46,
     head: [["Specializzando", "Ferie approvate", "gg", "Congressi approvati", "gg", `Ferie a.a.\n${ay.label}\n(tot. approvate)`]],
     body: rows.map((r) => [
       r.name,
