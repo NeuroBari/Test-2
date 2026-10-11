@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ferie e Congressi · Neurologia</title>
+  <meta name="description" content="Organizzazione mese per mese di ferie e congressi degli specializzandi in Neurologia.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🧠</span>
+      <div>
+        <h1>Ferie &amp; Congressi</h1>
+        <p>Specializzandi in Neurologia</p>
+      </div>
+    </div>
+    <span id="mode-badge" class="mode-badge"></span>
+  </header>
+
+  <main class="container">
+    <section class="toolbar card">
+      <label class="field">
+        <span>Anno di corso</span>
+        <select id="year-select"></select>
+      </label>
+      <div class="month-nav">
+        <button type="button" id="prev-month" class="btn icon" aria-label="Mese precedente">‹</button>
+        <strong id="month-label"></strong>
+        <button type="button" id="next-month" class="btn icon" aria-label="Mese successivo">›</button>
+        <button type="button" id="today-btn" class="btn ghost small">Oggi</button>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Vista">
+        <button type="button" role="tab" data-view="resident">Specializzando</button>
+        <button type="button" role="tab" data-view="rep">Rappresentante</button>
+      </nav>
+    </section>
+
+    <p id="loading" class="muted center">Caricamento…</p>
+    <div id="view-resident"></div>
+    <div id="view-rep" hidden></div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

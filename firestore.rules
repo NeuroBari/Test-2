@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Regole di base per il database Firestore del sito Ferie & Congressi.
+// Consentono lettura e scrittura a chiunque abbia il link del sito, ma
+// verificano che i dati abbiano il formato atteso.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /years/{yearId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.label is string
+                            && request.resource.data.label.size() <= 40
+                            && (!('residents' in request.resource.data) || request.resource.data.residents is list);
+      allow delete: if true;
+    }
+
+    match /entries/{entryId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.type in ['ferie', 'congresso']
+                            && request.resource.data.status in ['pending', 'approved', 'rejected']
+                            && request.resource.data.date is string
+                            && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                            && request.resource.data.yearId is string
+                            && request.resource.data.residentId is string
+                            && (!('note' in request.resource.data) || request.resource.data.note.size() <= 120);
+      allow delete: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
