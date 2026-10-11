@@ -1,5 +1,5 @@
 import { createStore } from "./store.js";
-import { FERIE_LIMIT } from "./config.js";
+import { FERIE_LIMIT, COURSE_YEARS } from "./config.js";
 import * as D from "./dates.js";
 import { buildReport, exportPdf, exportCsv } from "./export.js";
 
@@ -38,9 +38,49 @@ const ui = {
 let state = { years: {}, entries: {}, comments: {} };
 let store = null;
 
-const yearsSorted = () =>
-  Object.values(state.years).sort((a, b) => (a.order ?? 99) - (b.order ?? 99) || a.label.localeCompare(b.label));
-const currentYear = () => state.years[ui.yearId] || null;
+// Gruppi di specializzandi (coorti). Un gruppo è al I anno nell'anno accademico che
+// inizia in startYear e avanza di un anno di corso a ogni nuovo anno accademico.
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
+const viewAyStart = () => Number(viewAcademicYear().from.slice(0, 4));
+const courseYear = (group, ayStart = viewAyStart()) => ayStart - group.startYear + 1;
+const groupLabel = (group, ayStart) => `${ROMAN[courseYear(group, ayStart)] ?? courseYear(group, ayStart)} anno`;
+const ayLabelOf = (startYear) => `${startYear}/${String((startYear + 1) % 100).padStart(2, "0")}`;
+
+/** Gruppi in corso nell'anno accademico visualizzato, dal I all'ultimo anno. */
+const yearsSorted = () => {
+  const s = viewAyStart();
+  return Object.values(state.years)
+    .filter((g) => Number.isFinite(g.startYear) && courseYear(g, s) >= 1 && courseYear(g, s) <= COURSE_YEARS)
+    .sort((a, b) => b.startYear - a.startYear);
+};
+const currentYear = () => yearsSorted().find((g) => g.id === ui.yearId) || null;
+
+/**
+ * Crea i gruppi mancanti per l'anno accademico visualizzato (es. il nuovo I anno
+ * dal 1° novembre) e converte i vecchi "anni di corso" fissi in gruppi.
+ */
+const ensuring = new Set();
+function ensureGroups() {
+  const s = viewAyStart();
+  const todayAy = Number(D.academicYear(D.todayIso()).from.slice(0, 4));
+  const missing = [];
+  for (const g of Object.values(state.years))
+    if (!Number.isFinite(g.startYear) && Number.isFinite(g.order) && !ensuring.has(g.id))
+      missing.push({ id: g.id, startYear: todayAy - g.order + 1 });
+  const starts = new Set([...Object.values(state.years).map((g) => g.startYear), ...missing.map((g) => g.startYear)]);
+  // Negli anni accademici passati si mostrano solo i gruppi già esistenti
+  for (let k = 1; s >= todayAy && k <= COURSE_YEARS; k++) {
+    const startYear = s - k + 1;
+    const id = `c${startYear}`;
+    if (!starts.has(startYear) && !ensuring.has(id)) missing.push({ id, startYear });
+  }
+  if (!missing.length) return;
+  missing.forEach((g) => ensuring.add(g.id));
+  store.ensureYears(missing).catch((err) => {
+    missing.forEach((g) => ensuring.delete(g.id));
+    toast("Errore nella creazione degli anni di corso: " + err.message, "error");
+  });
+}
 const entryId = (yearId, residentId, date) => `${yearId}__${residentId}__${date}`;
 const residentsOf = (year) => [...(year.residents || [])].sort(byName);
 const nameOf = (year, rid) => year.residents.find((r) => r.id === rid)?.name ?? "—";
@@ -166,11 +206,15 @@ const card = (html, cls = "") => `<section class="card ${cls}">${html}</section>
 function render() {
   // Con Firebase carica (una volta) le richieste dell'anno accademico visualizzato
   store.watchAcademicYear(viewAcademicYear().from).catch((err) => toast("Errore nel caricamento: " + err.message, "error"));
-  if (!state.years[ui.yearId]) ui.yearId = yearsSorted()[0]?.id ?? null;
+  ensureGroups();
+  const groups = yearsSorted();
+  // Il gruppo scelto resta lo stesso anche cambiando anno accademico (passa dal II al III anno)
+  if (!groups.some((g) => g.id === ui.yearId))
+    ui.yearId = groups.some((g) => g.id === prefs.yearId) ? prefs.yearId : groups[0]?.id ?? null;
   const year = currentYear();
 
-  $("#year-select").innerHTML = yearsSorted()
-    .map((y) => `<option value="${esc(y.id)}" ${y.id === ui.yearId ? "selected" : ""}>${esc(y.label)}</option>`)
+  $("#year-select").innerHTML = groups
+    .map((y) => `<option value="${esc(y.id)}" ${y.id === ui.yearId ? "selected" : ""}>${groupLabel(y)}</option>`)
     .join("");
   $("#month-label").textContent = D.monthLabel(ui.y, ui.m);
   document.querySelectorAll(".tabs [data-view]").forEach((b) => {
@@ -200,7 +244,7 @@ function renderResident(year) {
         ${residents.map((r) => `<option value="${esc(r.id)}" ${r.id === rid ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
       </select>
     </label>
-    ${residents.length ? "" : `<p class="muted">Non ci sono ancora specializzandi nel ${esc(year.label)}. Il rappresentante può aggiungerli dall'area <strong>Rappresentante</strong>.</p>`}
+    ${residents.length ? "" : `<p class="muted">Non ci sono ancora specializzandi nel ${groupLabel(year)}. Il rappresentante può aggiungerli dall'area <strong>Rappresentante</strong>.</p>`}
   `, "picker");
 
   if (!rid) {
@@ -358,7 +402,7 @@ function renderRep(year) {
     return rerender(el, card(`
       <form id="${setup ? "pin-setup" : "pin-login"}" class="lock">
         <div class="lock-icon" aria-hidden="true">🔒</div>
-        <h2>Area rappresentante · ${esc(year.label)}</h2>
+        <h2>Area rappresentante · ${groupLabel(year)}</h2>
         ${setup
           ? `<p class="muted">Primo accesso: scegli un PIN (almeno 4 caratteri) per proteggere l'area rappresentante di questo anno di corso.</p>
              <div class="form-row center">
@@ -366,7 +410,7 @@ function renderRep(year) {
                <label class="field"><span>Conferma PIN</span><input type="password" name="pin2" minlength="4" required autocomplete="new-password"></label>
              </div>
              <button class="btn primary">Imposta PIN ed entra</button>`
-          : `<p class="muted">Inserisci il PIN del rappresentante del ${esc(year.label)}.</p>
+          : `<p class="muted">Inserisci il PIN del rappresentante del ${groupLabel(year)}.</p>
              <div class="form-row center">
                <label class="field"><span>PIN</span><input type="password" name="pin" required autocomplete="current-password"></label>
              </div>
@@ -433,7 +477,7 @@ function renderRep(year) {
         <tbody>${bodyRows}${countRow}</tbody>
       </table></div>
       <p class="muted small">Clic su una cella per cambiare stato: in attesa → approvato → rifiutato. Le colonne arancioni indicano giorni in cui più colleghi sono assenti.</p>`
-    : `<p class="muted">Aggiungi gli specializzandi del ${esc(year.label)} nella sezione qui sotto.</p>`;
+    : `<p class="muted">Aggiungi gli specializzandi del ${groupLabel(year)} nella sezione qui sotto.</p>`;
 
   // Sovrapposizioni
   const conflicts = overlapDates.length
@@ -463,7 +507,7 @@ function renderRep(year) {
   rerender(el, `
     ${card(`
       <div class="rep-head">
-        <h2>Area rappresentante · ${esc(year.label)}</h2>
+        <h2>Area rappresentante · ${groupLabel(year)}</h2>
         <button type="button" class="btn ghost" data-action="lock">Esci</button>
       </div>
       <div class="kpis">
@@ -483,7 +527,7 @@ function renderRep(year) {
     ${year.commentsEnabled ? card(repCommentsHtml(year, residents, ay), "comments") : ""}
     ${card(`
       <h3>Scarica riepilogo</h3>
-      <p class="muted">Documento con i soli giorni <strong>approvati</strong> per ogni specializzando del ${esc(year.label)}, con il totale ferie dell'anno accademico e l'avviso di superamento dei ${FERIE_LIMIT} giorni.</p>
+      <p class="muted">Documento con i soli giorni <strong>approvati</strong> per ogni specializzando del ${groupLabel(year)}, con il totale ferie dell'anno accademico e l'avviso di superamento dei ${FERIE_LIMIT} giorni.</p>
       <div class="form-row">
         <label class="field"><span>Periodo</span>
           <select id="export-period" data-keep="exp-period">
@@ -497,7 +541,7 @@ function renderRep(year) {
       ${year.commentsEnabled ? `<p class="muted small">Il PDF include i commenti del rappresentante relativi al periodo.</p>` : ""}
     `)}
     ${card(`
-      <h3>Specializzandi del ${esc(year.label)}</h3>
+      <h3>Specializzandi del ${groupLabel(year)}</h3>
       ${residents.length ? `<ul class="res-list">${residentList}</ul>` : ""}
       <form id="add-res-form" class="form-row">
         <label class="field grow"><span>Nuovo specializzando</span><input name="name" data-keep="add-res" placeholder="Cognome Nome" maxlength="80" required></label>
@@ -510,18 +554,18 @@ function renderRep(year) {
         <input type="checkbox" id="comments-toggle" ${year.commentsEnabled ? "checked" : ""}>
         <span><strong>Commenti del rappresentante</strong><br><span class="muted small">Per segnalare problemi nell'approvazione. I commenti sono visibili agli specializzandi interessati e vengono riportati nel PDF.</span></span>
       </label>
-      <form id="rename-year-form" class="form-row">
-        <label class="field grow"><span>Nome dell'anno di corso</span><input name="label" value="${esc(year.label)}" maxlength="40" required></label>
-        <button class="btn">Rinomina</button>
-      </form>
+      <div class="alert info">
+        Questo gruppo ha iniziato il I anno nell'a.a. ${ayLabelOf(year.startYear)}.
+        ${courseYear(year) < COURSE_YEARS
+          ? `Dal 1° novembre ${viewAyStart() + 1} diventerà automaticamente <strong>${ROMAN[courseYear(year) + 1]} anno</strong>, con gli stessi nomi e lo stesso PIN.`
+          : `È l'ultimo anno di corso: dal 1° novembre ${viewAyStart() + 1} il gruppo non comparirà più tra gli anni in corso, ma i suoi dati resteranno consultabili tornando agli anni passati.`}
+      </div>
       <form id="change-pin-form" class="form-row">
         <label class="field"><span>Nuovo PIN</span><input type="password" name="pin" minlength="4" required autocomplete="new-password"></label>
         <label class="field"><span>Conferma</span><input type="password" name="pin2" minlength="4" required autocomplete="new-password"></label>
         <button class="btn">Cambia PIN</button>
       </form>
       <div class="form-row">
-        <button type="button" class="btn" data-action="add-year">+ Aggiungi anno di corso</button>
-        ${residents.length ? "" : `<button type="button" class="btn ghost danger-text" data-action="delete-year">Elimina ${esc(year.label)}</button>`}
         <button type="button" class="btn ghost" data-action="backup-export">${store.mode === "local" ? "Backup dati (JSON)" : `Backup a.a. ${ay.label} (JSON)`}</button>
         ${store.mode === "local" ? `<label class="btn ghost">Ripristina backup<input type="file" id="import-file" accept="application/json" hidden></label>` : ""}
       </div>
@@ -775,10 +819,6 @@ function wire() {
         form.reset();
         return act(() => store.saveComment(comment), "Commento aggiunto.");
       }
-      case "rename-year-form": {
-        const label = String(fd.get("label") || "").trim();
-        if (label) return act(() => store.saveYear({ ...year, label }), "Anno di corso rinominato.");
-      }
     }
   });
 
@@ -867,7 +907,7 @@ function wire() {
       case "export-csv": {
         const period = exportPeriod();
         const report = buildReport({ year, entries: idx.all, from: period.from, to: period.to, limit: FERIE_LIMIT });
-        if (btn.dataset.action === "export-csv") return exportCsv({ year, report, period });
+        if (btn.dataset.action === "export-csv") return exportCsv({ year: { ...year, label: groupLabel(year) }, report, period });
         btn.disabled = true;
         const old = btn.textContent;
         btn.textContent = "Preparazione…";
@@ -876,24 +916,11 @@ function wire() {
               .filter((c) => commentInPeriod(c, period.from, period.to))
               .map((c) => ({ who: c.residentId ? nameOf(year, c.residentId) : "Tutti", when: commentWhen(c) || "—", text: c.text }))
           : null;
-        await act(() => exportPdf({ year, report, period, limit: FERIE_LIMIT, comments }));
+        await act(() => exportPdf({ year: { ...year, label: groupLabel(year) }, report, period, limit: FERIE_LIMIT, comments }));
         btn.disabled = false;
         btn.textContent = old;
         return;
       }
-      case "add-year": {
-        const label = prompt("Nome del nuovo anno di corso (es. V anno):");
-        if (!label?.trim()) return;
-        const order = Math.max(0, ...Object.values(state.years).map((y) => y.order ?? 0)) + 1;
-        const id = newId("y");
-        await act(() => store.saveYear({ id, label: label.trim(), order, residents: [], pinHash: "" }), "Anno di corso aggiunto.");
-        ui.yearId = id;
-        savePrefs({ yearId: id });
-        return render();
-      }
-      case "delete-year":
-        if (!confirm(`Eliminare ${year.label}?`)) return;
-        return act(() => store.deleteYear(year.id), "Anno di corso eliminato.");
       case "backup-export":
         return download(`backup-ferie-congressi_${D.todayIso()}.json`, JSON.stringify(state, null, 2), "application/json");
     }

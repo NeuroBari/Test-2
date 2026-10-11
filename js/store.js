@@ -1,7 +1,10 @@
 // Archivio dati: Firebase Firestore (condiviso) oppure localStorage (locale).
 //
 // Modello dati (Firestore)
-//   years/{yearId}       { id, label, order, residents: [{ id, name }], pinHash }
+//   years/{yearId}       { id, startYear, residents: [{ id, name }], pinHash, commentsEnabled }
+//                        un gruppo di specializzandi (coorte): startYear è l'anno in cui
+//                        inizia il loro I anno (2026 = a.a. 2026/27). L'anno di corso
+//                        si calcola dall'anno accademico visualizzato.
 //   comments/{id}        { id, yearId, ay, residentId ("" = tutti), from, to, text, createdAt }
 //                        commenti del rappresentante (attivabili per anno di corso)
 //   absences/{yearId}__{residentId}__{ay}
@@ -15,7 +18,7 @@
 //   entries[id] = { id, yearId, residentId, date, type, status, note, updatedAt }
 // con id = `${yearId}__${residentId}__${date}`.
 
-import { FIREBASE_CONFIG, DEFAULT_YEARS } from "./config.js";
+import { FIREBASE_CONFIG } from "./config.js";
 import { academicYear } from "./dates.js";
 
 const FIREBASE_VERSION = "10.12.2";
@@ -34,7 +37,7 @@ export async function createStore(onChange) {
   return localStore(onChange);
 }
 
-const normalizeYear = (id, y) => ({ id, label: id, order: 99, residents: [], pinHash: "", commentsEnabled: false, ...y });
+const normalizeYear = (id, y) => ({ id, residents: [], pinHash: "", commentsEnabled: false, ...y });
 
 // ---------------------------------------------------------------------------
 // Modalità locale
@@ -48,7 +51,7 @@ function localStore(onChange) {
       if (d && d.years && d.entries) return { comments: {}, ...d };
     } catch { /* storage non disponibile o dati corrotti */ }
     return {
-      years: Object.fromEntries(DEFAULT_YEARS.map((y) => [y.id, normalizeYear(y.id, y)])),
+      years: {},
       entries: {},
       comments: {},
     };
@@ -84,8 +87,8 @@ function localStore(onChange) {
       data.years[y.id] = structuredClone(y);
       persist();
     },
-    async deleteYear(id) {
-      delete data.years[id];
+    async ensureYears(list) {
+      for (const y of list) data.years[y.id] = normalizeYear(y.id, { ...y, ...data.years[y.id] });
       persist();
     },
     async saveEntries(list) {
@@ -127,12 +130,6 @@ async function firebaseStore(onChange) {
   const db = fs.getFirestore(app);
   const data = { years: {}, entries: {}, comments: {} };
 
-  const seed = () => {
-    // merge: non sovrascrive specializzandi o PIN se un altro client ha già creato l'anno
-    for (const y of DEFAULT_YEARS)
-      fs.setDoc(fs.doc(db, "years", y.id), { id: y.id, label: y.label, order: y.order }, { merge: true });
-  };
-
   const firstYears = new Promise((resolve, reject) => {
     fs.onSnapshot(
       fs.collection(db, "years"),
@@ -142,7 +139,6 @@ async function firebaseStore(onChange) {
         data.years = years;
         resolve();
         onChange(data);
-        if (snap.empty && !snap.metadata.fromCache) seed();
       },
       reject,
     );
@@ -230,7 +226,8 @@ async function firebaseStore(onChange) {
     data,
     watchAcademicYear,
     saveYear: (y) => fs.setDoc(fs.doc(db, "years", y.id), JSON.parse(JSON.stringify(y))),
-    deleteYear: (id) => fs.deleteDoc(fs.doc(db, "years", id)),
+    // merge: se un altro dispositivo ha già creato il gruppo non ne tocca nomi e PIN
+    ensureYears: (list) => batched(list, (b, y) => b.set(fs.doc(db, "years", y.id), y, { merge: true })),
     saveEntries: (list) =>
       groupByDoc(list, (e) => ({
         ...e,

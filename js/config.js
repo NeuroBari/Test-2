@@ -24,11 +24,8 @@ export const FERIE_LIMIT = 30;
 // Con 11 l'anno accademico va dal 1° novembre al 31 ottobre successivo.
 export const ACADEMIC_YEAR_START_MONTH = 11;
 
-// Anni di corso creati al primo avvio (altri possono essere aggiunti
-// dall'area rappresentante).
-export const DEFAULT_YEARS = [
-  { id: "y1", label: "I anno", order: 1 },
-  { id: "y2", label: "II anno", order: 2 },
-  { id: "y3", label: "III anno", order: 3 },
-  { id: "y4", label: "IV anno", order: 4 },
-];
+// Durata della scuola di specializzazione in anni. Ogni gruppo di
+// specializzandi avanza automaticamente di un anno di corso all'inizio di
+// ogni anno accademico (es. il 1° novembre il II anno diventa III anno);
+// dopo l'ultimo anno il gruppo resta consultabile solo negli anni passati.
+export const COURSE_YEARS = 4;

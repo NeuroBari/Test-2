@@ -8,10 +8,10 @@ service cloud.firestore {
 
     match /years/{yearId} {
       allow read: if true;
-      allow create, update: if request.resource.data.label is string
-                            && request.resource.data.label.size() <= 40
+      // Gruppo di specializzandi: startYear = anno di inizio del loro I anno
+      allow create, update: if request.resource.data.startYear is int
                             && (!('residents' in request.resource.data) || request.resource.data.residents is list);
-      allow delete: if true;
+      allow delete: if false;
     }
 
     // Un documento per specializzando e anno accademico: id = yearId__residentId__ay

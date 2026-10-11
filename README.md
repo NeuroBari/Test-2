@@ -17,9 +17,19 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - avviso per chi supera i 30 giorni di ferie e richiesta di conferma se un'approvazione li fa superare;
 - **download del riepilogo dei giorni approvati** in PDF (mese o anno accademico, con il dettaglio mese per mese e lo spazio per la firma) o in CSV per Excel;
 - **commenti del rappresentante** (da attivare in *Impostazioni*, per ogni anno di corso): servono a segnalare problemi nell'approvazione. Ogni commento può riguardare uno specializzando o tutti, con un periodo facoltativo, e si può scrivere direttamente dall'elenco delle sovrapposizioni con il pulsante *Commenta*. Lo specializzando interessato li vede nella sua pagina e, se i commenti sono attivi, finiscono nel PDF nella sezione "Commenti del rappresentante";
-- gestione dell'elenco degli specializzandi, del nome dell'anno di corso, del PIN, aggiunta di nuovi anni di corso e backup JSON.
+- gestione dell'elenco degli specializzandi, del PIN e backup JSON.
 
 Le festività nazionali italiane (Pasqua e Pasquetta comprese) sono evidenziate automaticamente.
+
+## Passaggio all'anno successivo e nuovo anno accademico
+
+I nomi si inseriscono **una sola volta**. Ogni gruppo di specializzandi avanza da solo di un anno di corso all'inizio di ogni anno accademico: il 1° novembre il I anno diventa II anno, il II diventa III e così via, con gli stessi nomi, lo stesso PIN del rappresentante e la stessa impostazione dei commenti.
+
+- Il 1° novembre compare in automatico un nuovo **I anno** vuoto: il suo rappresentante entra, imposta il PIN e aggiunge i nomi dei nuovi specializzandi.
+- Dopo il IV anno il gruppo non compare più tra gli anni in corso, ma i suoi dati restano consultabili tornando con le frecce ai mesi passati.
+- Con il nuovo anno accademico ripartono da zero il contatore delle ferie, le richieste e i commenti. Quelli degli anni precedenti non vengono cancellati: basta tornare indietro con le frecce del mese per rivederli o scaricarne il PDF.
+
+La durata della scuola (4 anni) si modifica con `COURSE_YEARS` in `js/config.js`.
 
 ## Pubblicazione su GitHub Pages
 
@@ -57,7 +67,7 @@ Il piano gratuito Spark consente 50.000 letture e 20.000 scritture al giorno e 1
 
 ## Note e limiti
 
-- Il limite di 30 giorni si calcola per **anno accademico, dal 1° novembre al 31 ottobre dell'anno successivo**, e somma le ferie approvate e quelle in attesa (le rifiutate non contano). Limite e mese di inizio si modificano con `FERIE_LIMIT` e `ACADEMIC_YEAR_START_MONTH` in `js/config.js`, dove si cambiano anche gli anni di corso iniziali (I–IV).
+- Il limite di 30 giorni si calcola per **anno accademico, dal 1° novembre al 31 ottobre dell'anno successivo**, e somma le ferie approvate e quelle in attesa (le rifiutate non contano). Limite e mese di inizio si modificano con `FERIE_LIMIT` e `ACADEMIC_YEAR_START_MONTH` in `js/config.js`.
 - Si conta ogni giorno segnato come ferie: con l'opzione "Escludi sabati, domeniche e festivi" si richiedono solo i giorni lavorativi.
 - Il PIN del rappresentante e la scelta del nome sono una protezione "di cortesia", adatta a un gruppo di colleghi che si fida l'uno dell'altro. Chi conosce il link e sa usare gli strumenti per sviluppatori potrebbe modificare i dati direttamente. Se serve una protezione reale, il passo successivo è aggiungere il login con Firebase Authentication e restringere le regole Firestore.
 - Le date sono salvate come `AAAA-MM-GG`, nel fuso orario del dispositivo.
@@ -67,7 +77,7 @@ Il piano gratuito Spark consente 50.000 letture e 20.000 scritture al giorno e 1
 ```
 index.html        pagina
 css/style.css     stile (chiaro/scuro, responsive)
-js/config.js      configurazione Firebase, limite ferie, anni di corso
+js/config.js      configurazione Firebase, limite ferie, durata della scuola
 js/app.js         interfaccia e logica
 js/store.js       salvataggio dati (Firestore o localStorage)
 js/dates.js       date, festività italiane, intervalli

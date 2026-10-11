@@ -199,6 +199,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .alert { padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; }
 .alert.danger { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
 .alert.warn { background: var(--warn-soft); color: var(--warn); }
+.alert.info { background: var(--surface-2); color: var(--text); font-size: .9rem; margin-bottom: 14px; }
 .card .alert { margin-top: 12px; }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
