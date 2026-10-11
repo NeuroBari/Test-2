@@ -32,15 +32,6 @@ I nomi si inseriscono **una sola volta**. Ogni gruppo di specializzandi avanza d
 
 La durata della scuola (4 anni) si modifica con `COURSE_YEARS` in `js/config.js`.
 
-## App sul telefono
-
-Il sito si può installare come un'app (PWA), senza passare dagli store:
-
-- **Android / Chrome / Edge**: pulsante **Installa** in alto a destra, oppure menu del browser → *Installa app*.
-- **iPhone / iPad**: con Safari, tasto **Condividi** → **Aggiungi alla schermata Home** (il pulsante *Installa* mostra le istruzioni).
-
-L'app si apre a schermo intero con la sua icona, si aggiorna da sola a ogni modifica del sito e, senza connessione, mostra l'ultima versione salvata. I file sono `manifest.webmanifest`, `sw.js`, `js/pwa.js` e la cartella `icons/`.
-
 ## Pubblicazione su GitHub Pages
 
 1. Su GitHub apri **Settings → Pages**.
@@ -93,8 +84,5 @@ js/store.js       salvataggio dati (Firestore o localStorage)
 js/dates.js       date, festività italiane, intervalli
 js/export.js      riepilogo PDF (jsPDF) e CSV
 js/rotations.js   lettura dell'Excel dei turni (SheetJS)
-js/pwa.js         app installabile: service worker e pulsante "Installa"
-sw.js             service worker (aggiornamenti e apertura senza rete)
-manifest.webmanifest, icons/   nome, colori e icone dell'app
 firestore.rules   regole di sicurezza Firestore
 ```
