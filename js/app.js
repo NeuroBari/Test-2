@@ -2,6 +2,7 @@ import { createStore } from "./store.js";
 import { FERIE_LIMIT, COURSE_YEARS, ACADEMIC_YEAR_START_MONTH } from "./config.js";
 import * as D from "./dates.js";
 import { buildReport, exportPdf, exportCsv } from "./export.js";
+import { setupPwa } from "./pwa.js";
 import { parseRotationsFile, guessResident, monthKey, normName } from "./rotations.js";
 
 const TYPE_LABEL = { ferie: "Ferie", congresso: "Congresso" };
@@ -1513,12 +1514,8 @@ function wire() {
 // ---------------------------------------------------------------------------
 // Avvio
 // ---------------------------------------------------------------------------
-// Rimuove l'app installabile (service worker) attivata per breve tempo in una versione precedente
-navigator.serviceWorker?.getRegistrations?.()
-  .then((regs) => regs.forEach((r) => r.unregister()))
-  .catch(() => {});
-
 (async function init() {
+  setupPwa();
   wire();
   try {
     store = await createStore((data) => {

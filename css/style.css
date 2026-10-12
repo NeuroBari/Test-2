@@ -124,6 +124,27 @@ h3 { font-size: 1.05rem; margin-bottom: .75rem; }
 .place:hover { background: rgba(255, 255, 255, .22); }
 .place strong { display: block; font-size: .85rem; }
 .place small { display: block; font-size: .72rem; color: var(--header-muted); }
+/* App installata: rispetta notch e barre di sistema */
+.topbar { padding-top: max(16px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.install-btn {
+  font: inherit; font-weight: 700; font-size: .85rem; white-space: nowrap; cursor: pointer;
+  padding: 7px 14px; border-radius: 999px; border: 0;
+  background: #fffdf8; color: #0b5394; box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+.install-btn:hover { background: #fff; }
+.install-help {
+  border: 0;
+  border-radius: var(--radius);
+  padding: 20px;
+  max-width: min(420px, calc(100vw - 32px));
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.install-help::backdrop { background: rgba(15, 20, 32, .5); }
+.install-help img { display: block; border-radius: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.install-help h2 { margin-bottom: 10px; }
+.install-help ol { padding-left: 20px; margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
 .mode-badge { font-size: .8rem; padding: 4px 10px; border-radius: 999px; white-space: nowrap; cursor: help; }
 .mode-badge.online { background: var(--ok-soft); color: var(--ok); }
 .mode-badge.local { background: var(--warn-soft); color: var(--warn); }
@@ -590,9 +611,11 @@ textarea { width: 100%; resize: vertical; line-height: 1.4; }
   .place { padding: 5px 10px; }
   .place small, .topbar .mode-badge { display: none; }
   .place strong { font-size: .78rem; }
+  .hide-sm { display: none; }
+  .install-btn { padding: 6px 12px; font-size: .8rem; }
 }
 
 @media print {
-  .topbar, .toolbar, .tabs, .btn, .brush, .range-form { display: none !important; }
+  .topbar, .toolbar, .install-btn, .tabs, .btn, .brush, .range-form { display: none !important; }
   body { background: #fff; }
 }
