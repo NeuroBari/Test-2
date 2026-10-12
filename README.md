@@ -8,6 +8,7 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - sceglie l'anno di corso e il proprio nome;
 - segna i singoli giorni sul calendario del mese come *Ferie* o *Congresso* (un tocco per segnare, un altro per togliere), oppure un intero periodo con il modulo "Segna un periodo", con l'opzione di escludere weekend e festivi e di aggiungere una nota (es. il nome del congresso);
 - può **trascinare** sul calendario per segnare (o cancellare) più giorni insieme: con il mouse tieni premuto e trascina, sul telefono tieni premuto un attimo sul giorno e poi trascina; i weekend e i festivi in mezzo vengono saltati;
+- apre la **scheda del giorno** (la sua richiesta, i colleghi assenti con tipo, stato e reparto, e i pulsanti Ferie / Congresso / Rimuovi) con lo strumento «Dettagli», tenendo premuto sul giorno dal telefono o con il tasto destro dal computer;
 - trova un riquadro **Novità** con le richieste approvate o rifiutate e i nuovi messaggi del rappresentante dall'ultima visita;
 - con **"Aggiungi al mio calendario"** scarica un file .ics con i giorni approvati dell'anno accademico da importare in Google Calendar, Calendario di iPhone o Outlook;
 - vede lo stato di ogni richiesta (in attesa / approvata / rifiutata) e quanti colleghi del suo anno sono assenti in ogni giorno (👥);
@@ -24,6 +25,7 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - **novità dall'ultimo accesso**: all'apertura dell'area rappresentante un riquadro elenca le nuove richieste in attesa (chi, cosa, quando) e quanti giorni toccano colleghi dello stesso reparto; "Segna come viste" lo nasconde fino alle prossime novità (ricordato su ogni dispositivo);
 - **filtro per reparto** nella tabella del mese (dai turni caricati);
 - **panoramica dell'anno accademico**: giorni di assenza per specializzando e per mese, ferie usate su 30 e numero di giorni con sovrapposizioni per mese (in rosso se nello stesso reparto); toccando un mese si apre quel mese;
+- **promemoria di backup**: se da quel dispositivo non si scarica un backup da più di 30 giorni compare un avviso con il pulsante "Scarica backup" (o "Più tardi", che lo rimanda di una settimana). Il backup è completo: tutti gli anni di corso e tutti gli anni accademici;
 - gestione dell'elenco degli specializzandi, del PIN e backup JSON.
 
 Le festività nazionali italiane (Pasqua e Pasquetta comprese) sono evidenziate automaticamente.
@@ -76,6 +78,7 @@ Il piano gratuito Spark consente 50.000 letture e 20.000 scritture al giorno e 1
 
 - Il limite di 30 giorni si calcola per **anno accademico, dal 1° novembre al 31 ottobre dell'anno successivo**, e somma le ferie approvate e quelle in attesa (le rifiutate non contano). Limite e mese di inizio si modificano con `FERIE_LIMIT` e `ACADEMIC_YEAR_START_MONTH` in `js/config.js`.
 - Si conta ogni giorno segnato come ferie: con l'opzione "Escludi sabati, domeniche e festivi" si richiedono solo i giorni lavorativi.
+- Le modifiche ai dati del gruppo (nomi, PIN, turni, impostazioni) sono salvate con una transazione: se due rappresentanti salvano quasi insieme, nessuna delle due modifiche va persa.
 - Il PIN del rappresentante e la scelta del nome sono una protezione "di cortesia", adatta a un gruppo di colleghi che si fida l'uno dell'altro. Chi conosce il link e sa usare gli strumenti per sviluppatori potrebbe modificare i dati direttamente. Se serve una protezione reale, il passo successivo è aggiungere il login con Firebase Authentication e restringere le regole Firestore.
 - Le date sono salvate come `AAAA-MM-GG`, nel fuso orario del dispositivo.
 

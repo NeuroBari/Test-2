@@ -307,6 +307,7 @@ function renderResident(year) {
     ["ferie", "Ferie"],
     ["congresso", "Congresso"],
     ["cancella", "Cancella"],
+    ["dettagli", "Dettagli"],
   ].map(([k, l]) => `<button type="button" class="brush-btn ${k} ${ui.brush === k ? "active" : ""}" data-brush="${k}" aria-pressed="${ui.brush === k}">${l}</button>`).join("");
 
   const myMonth = idx.all.filter((e) => e.residentId === rid && e.date.startsWith(`${ui.y}-${String(ui.m + 1).padStart(2, "0")}`));
@@ -332,7 +333,7 @@ function renderResident(year) {
     ${card(`
       <div class="cal-head">
         <div class="brush" role="group" aria-label="Cosa segnare">${brushes}</div>
-        <p class="muted small">Tocca un giorno per segnarlo, toccalo di nuovo per toglierlo. Per più giorni <strong>trascina</strong> sul calendario (sul telefono: tieni premuto un attimo, poi trascina). 👥 = colleghi del tuo anno assenti quel giorno.</p>
+        <p class="muted small">Tocca un giorno per segnarlo, toccalo di nuovo per toglierlo. Per più giorni <strong>trascina</strong> sul calendario (sul telefono: tieni premuto un attimo, poi trascina). Per vedere <strong>chi è assente</strong> in un giorno usa «Dettagli», oppure tieni premuto sul giorno (sul computer: tasto destro). 👥 = colleghi del tuo anno assenti quel giorno.</p>
         <p class="drag-hint" id="drag-hint" aria-live="polite"></p>
       </div>
       ${calendarHtml(year, rid, idx)}
@@ -622,6 +623,7 @@ function renderRep(year) {
         <button type="button" class="btn" data-action="approve-month" ${pendingMonth.length ? "" : "disabled"}>Approva tutte le richieste del mese (${pendingMonth.length})</button>
       </div>
     `)}
+    ${backupReminderHtml()}
     ${repNewsHtml(year, idx)}
     ${card(`<h3>${D.monthLabel(ui.y, ui.m)}</h3>${filterChips}${table}${legendHtml()}`)}
     ${card(`<h3>Sovrapposizioni · ${D.monthLabel(ui.y, ui.m)}</h3>${conflicts}`, "conflicts")}
@@ -669,11 +671,50 @@ function renderRep(year) {
         <button class="btn">Cambia PIN</button>
       </form>
       <div class="form-row">
-        <button type="button" class="btn ghost" data-action="backup-export">${store.mode === "local" ? "Backup dati (JSON)" : `Backup a.a. ${ay.label} (JSON)`}</button>
+        <button type="button" class="btn ghost" data-action="backup-export">Backup completo (JSON)</button>
         ${store.mode === "local" ? `<label class="btn ghost">Ripristina backup<input type="file" id="import-file" accept="application/json" hidden></label>` : ""}
       </div>
     `)}
   `);
+}
+
+// Promemoria di backup: il piano gratuito di Firebase non conserva copie dei dati,
+// quindi una volta al mese si ricorda al rappresentante di scaricarne una (per dispositivo).
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BACKUP_EVERY_DAYS = 30;
+const readNum = (k) => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+
+function backupReminderHtml() {
+  const hasData = Object.values(state.years).some((y) => y.residents?.length);
+  const last = readNum("backup-last");
+  if (!hasData || Date.now() - last < BACKUP_EVERY_DAYS * DAY_MS || Date.now() < readNum("backup-snooze")) return "";
+  const days = last ? Math.floor((Date.now() - last) / DAY_MS) : 0;
+  return card(`
+    <div class="backup-reminder">
+      <span class="backup-icon" aria-hidden="true">💾</span>
+      <div class="backup-text">
+        <strong>È ora di fare un backup</strong>
+        <p>${last ? `L'ultimo backup scaricato da questo dispositivo è del ${new Date(last).toLocaleDateString("it-IT")} (${days} giorni fa).` : "Da questo dispositivo non hai ancora scaricato un backup."}
+        ${store.mode === "local" ? "I dati sono salvati solo in questo browser: un backup li protegge se il browser viene ripulito." : "Il piano gratuito di Firebase non conserva copie: un backup al mese protegge da cancellazioni accidentali."}</p>
+      </div>
+      <div class="backup-actions">
+        <button type="button" class="btn primary" data-action="backup-export">Scarica backup</button>
+        <button type="button" class="btn ghost" data-action="backup-later">Più tardi</button>
+      </div>
+    </div>`, "backup");
+}
+
+async function backupNow() {
+  try {
+    const data = await store.exportAll();
+    download(`backup-ferie-congressi_${D.todayIso()}.json`, JSON.stringify(data, null, 2), "application/json");
+    try { localStorage.setItem("backup-last", String(Date.now())); } catch { /* ignorato */ }
+    toast("Backup scaricato: conservalo in un posto sicuro (es. Drive o email).");
+    render();
+  } catch (err) {
+    console.error(err);
+    toast("Errore nel backup: " + (err?.message || err), "error");
+  }
 }
 
 // Novità dall'ultimo accesso del rappresentante (memorizzato su questo dispositivo)
@@ -840,10 +881,81 @@ function repCommentsHtml(year, residents, ay) {
 // ---------------------------------------------------------------------------
 // Azioni
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Scheda del giorno: la tua richiesta, i colleghi assenti e i pulsanti per segnare
+// ---------------------------------------------------------------------------
+const WEEKDAYS = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
+const longDay = (date) => {
+  const d = D.parse(date);
+  return `${D.capitalize(WEEKDAYS[d.getDay()])} ${d.getDate()} ${D.MONTHS[d.getMonth()]}`;
+};
+const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+function openDaySheet(date) {
+  const year = currentYear();
+  const rid = year && currentResidentId(year);
+  if (!rid) return;
+  const mine = state.entries[entryId(year.id, rid, date)];
+  const others = (indexYear(year).byDate.get(date) || []).filter((e) => e.residentId !== rid);
+  const myRot = normName(rotationOf(year, rid, date));
+  const hol = D.holidayName(date);
+  const li = (e) => {
+    const rot = rotationOf(year, e.residentId, date);
+    const same = myRot && normName(rot) === myRot;
+    return `<li>
+      <span class="av ${e.type} ${e.status} ${same ? "same" : ""}" aria-hidden="true">${esc(initials(nameOf(year, e.residentId)))}</span>
+      <span class="sheet-who"><strong>${esc(nameOf(year, e.residentId))}</strong>
+        <span>${TYPE_LABEL[e.type]}${e.note ? ` · ${esc(e.note)}` : ""}</span></span>
+      <span class="sheet-tags"><span class="status ${e.status}">${STATUS_LABEL[e.status]}</span>
+        ${rot ? `<span class="rot-chip ${same ? "high" : ""}">${esc(rot)}${same ? " · tuo reparto" : ""}</span>` : ""}</span>
+    </li>`;
+  };
+  const sheet = $("#day-sheet");
+  sheet.innerHTML = `
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head"><h3>${longDay(date)}</h3>${hol ? `<span class="sheet-hol">${esc(hol)}</span>` : ""}</header>
+    <div class="sheet-you">
+      <span class="muted">La tua richiesta</span>
+      ${mine ? `<span class="pill ${mine.type} ${mine.status}">${TYPE_LABEL[mine.type]} ${STATUS_ICON[mine.status]}</span> <span class="status ${mine.status}">${STATUS_LABEL[mine.status]}</span>` : "<span>nessuna</span>"}
+    </div>
+    <h4>Colleghi assenti${others.length ? ` (${others.length})` : ""}</h4>
+    ${others.length ? `<ul class="sheet-list">${others.map(li).join("")}</ul>` : `<p class="muted">Nessun collega del tuo anno è assente.</p>`}
+    <div class="sheet-actions">
+      <button type="button" class="btn sheet-ferie ${mine?.type === "ferie" ? "active" : ""}" data-sheet="ferie">Ferie</button>
+      <button type="button" class="btn sheet-congr ${mine?.type === "congresso" ? "active" : ""}" data-sheet="congresso">Congresso</button>
+      <button type="button" class="btn ghost danger-text" data-sheet="rimuovi" ${mine ? "" : "disabled"}>Rimuovi</button>
+    </div>
+    <button type="button" class="btn ghost sheet-close" data-sheet="chiudi">Chiudi</button>`;
+  sheet.dataset.date = date;
+  sheet.dataset.openedAt = String(Date.now());
+  if (!sheet.open) sheet.showModal();
+}
+
+/** Imposta (o rimuove, con type = null) la richiesta di un singolo giorno. */
+async function setDay(date, type) {
+  const year = currentYear();
+  const rid = year && currentResidentId(year);
+  if (!rid) return;
+  const id = entryId(year.id, rid, date);
+  const ex = state.entries[id];
+  if (!type) {
+    if (!ex) return;
+    if (ex.status === "approved" && !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Vuoi annullarlo?`)) return;
+    await act(() => store.deleteEntries([id]), "Richiesta rimossa.");
+    return;
+  }
+  if (ex?.type === type) return;
+  if (ex?.status === "approved" &&
+      !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Cambiandolo, la richiesta tornerà in attesa di approvazione. Continuare?`)) return;
+  const entry = { id, yearId: year.id, residentId: rid, date, type, status: "pending", note: "", updatedAt: Date.now() };
+  if (await act(() => store.saveEntries([entry]), `${TYPE_LABEL[type]} richiesta per ${D.fmtDay(date)}.`)) warnFerie(year, rid, date, type);
+}
+
 async function toggleDay(date) {
   const year = currentYear();
   const rid = year && currentResidentId(year);
   if (!rid) return;
+  if (ui.brush === "dettagli") return openDaySheet(date);
   const id = entryId(year.id, rid, date);
   const ex = state.entries[id];
 
@@ -970,7 +1082,7 @@ function paintDrag() {
   const sel = new Set(drag.active ? dragDates() : []);
   document.querySelectorAll("#view-resident .day[data-date]").forEach((el) => el.classList.toggle("sel", sel.has(el.dataset.date)));
   const hint = $("#drag-hint");
-  if (hint) hint.textContent = drag.active && sel.size > 1 ? `${sel.size} giorni selezionati — rilascia per ${ui.brush === "cancella" ? "cancellarli" : `segnarli come ${TYPE_LABEL[ui.brush].toLowerCase()}`}` : "";
+  if (hint) hint.textContent = drag.active && sel.size > 1 && ui.brush !== "dettagli" ? `${sel.size} giorni selezionati — rilascia per ${ui.brush === "cancella" ? "cancellarli" : `segnarli come ${TYPE_LABEL[ui.brush].toLowerCase()}`}` : "";
 }
 
 function wireDrag(res) {
@@ -983,6 +1095,7 @@ function wireDrag(res) {
   res.addEventListener("pointerdown", (e) => {
     const day = e.target.closest("button.day[data-date]");
     drag.suppressClick = false;
+    drag.touch = e.pointerType !== "mouse";
     if (!day || (e.pointerType === "mouse" && e.button !== 0)) return;
     drag.start = drag.end = day.dataset.date;
     drag.x = e.clientX;
@@ -1002,6 +1115,13 @@ function wireDrag(res) {
       paintDrag();
     }
   });
+  // Tasto destro sul computer: scheda del giorno (sul telefono la pressione prolungata è gestita sopra)
+  res.addEventListener("contextmenu", (e) => {
+    const day = e.target.closest("button.day[data-date]");
+    if (!day) return;
+    e.preventDefault();
+    if (!drag.touch) openDaySheet(day.dataset.date);
+  });
   // Mentre si trascina con il dito la pagina non deve scorrere
   res.addEventListener("touchmove", (e) => { if (drag.active) e.preventDefault(); }, { passive: false });
   const finish = async () => {
@@ -1011,7 +1131,15 @@ function wireDrag(res) {
     drag.active = false;
     const dates = dragDates();
     paintDrag();
-    if (dates.length < 2) return; // un solo giorno: ci pensa il normale tocco
+    if (dates.length < 2) {
+      // Sul telefono, pressione prolungata senza trascinare: apre la scheda del giorno
+      if (drag.touch) {
+        drag.suppressClick = true;
+        openDaySheet(drag.start);
+      }
+      return; // con il mouse ci pensa il normale clic
+    }
+    if (ui.brush === "dettagli") return;
     drag.suppressClick = true; // il clic che segue questo rilascio non è un tocco
     const year = currentYear();
     const rid = year && currentResidentId(year);
@@ -1137,6 +1265,16 @@ function wire() {
     }
   });
   wireDrag(res);
+  const sheet = $("#day-sheet");
+  sheet.addEventListener("click", async (e) => {
+    // Clic sullo sfondo: chiude, ma non il clic generato dal rilascio del dito che l'ha appena aperta
+    if (e.target === sheet) return Date.now() - Number(sheet.dataset.openedAt || 0) > 450 && sheet.close();
+    const b = e.target.closest("[data-sheet]");
+    if (!b) return;
+    if (b.dataset.sheet === "chiudi") return sheet.close();
+    sheet.close();
+    await setDay(sheet.dataset.date, b.dataset.sheet === "rimuovi" ? null : b.dataset.sheet);
+  });
   res.addEventListener("submit", (e) => {
     e.preventDefault();
     if (e.target.id === "range-form") submitRange(e.target);
@@ -1158,7 +1296,7 @@ function wire() {
         if (pin !== pin2) return toast("I due PIN non coincidono.", "error");
         const hash = await hashPin(year.id, pin);
         setUnlocked(year, hash);
-        await act(() => store.saveYear({ ...year, pinHash: hash }), form.id === "pin-setup" ? "PIN impostato." : "PIN aggiornato.");
+        await act(() => store.updateYear(year.id, (y) => ({ ...y, pinHash: hash })), form.id === "pin-setup" ? "PIN impostato." : "PIN aggiornato.");
         return render();
       }
       case "pin-login": {
@@ -1173,7 +1311,9 @@ function wire() {
         if (year.residents.some((r) => r.name.toLowerCase() === name.toLowerCase()))
           return toast(`${name} è già presente.`, "warn");
         form.reset();
-        return act(() => store.saveYear({ ...year, residents: [...year.residents, { id: newId("r"), name }] }), `${name} aggiunto/a.`);
+        const added = { id: newId("r"), name };
+        return act(() => store.updateYear(year.id, (y) =>
+          y.residents.some((r) => r.name.toLowerCase() === name.toLowerCase()) ? y : { ...y, residents: [...y.residents, added] }), `${name} aggiunto/a.`);
       }
       case "comment-form": {
         const text = String(fd.get("text") || "").trim();
@@ -1211,13 +1351,13 @@ function wire() {
     }
     if (e.target.id === "comments-toggle") {
       const on = e.target.checked;
-      return act(() => store.saveYear({ ...year, commentsEnabled: on }), on ? "Commenti attivati." : "Commenti disattivati.");
+      return act(() => store.updateYear(year.id, (y) => ({ ...y, commentsEnabled: on })), on ? "Commenti attivati." : "Commenti disattivati.");
     }
     const rid = e.target.dataset.rename;
     if (rid) {
       const name = e.target.value.trim().replace(/\s+/g, " ");
       if (!name) return render();
-      await act(() => store.saveYear({ ...year, residents: year.residents.map((r) => (r.id === rid ? { ...r, name } : r)) }), "Nome aggiornato.");
+      await act(() => store.updateYear(year.id, (y) => ({ ...y, residents: y.residents.map((r) => (r.id === rid ? { ...r, name } : r)) })), "Nome aggiornato.");
       return;
     }
     if (e.target.id === "import-file" && e.target.files[0]) {
@@ -1267,7 +1407,7 @@ function wire() {
         const commentIds = Object.values(state.comments || {}).filter((c) => c.yearId === year.id && c.residentId === rid).map((c) => c.id);
         if (!confirm(`Rimuovere ${nameOf(year, rid)}? Verranno eliminate anche le sue ${ids.length} richieste.`)) return;
         await act(async () => {
-          await store.saveYear({ ...year, residents: year.residents.filter((r) => r.id !== rid) });
+          await store.updateYear(year.id, (y) => ({ ...y, residents: y.residents.filter((r) => r.id !== rid) }));
           if (ids.length) await store.deleteEntries(ids);
           if (commentIds.length) await store.deleteComments(commentIds);
         }, "Specializzando rimosso.");
@@ -1293,7 +1433,8 @@ function wire() {
         const ayFrom = $("#rot-ay").value;
         const startYear = Number(ayFrom.slice(0, 4));
         const residents = [...year.residents];
-        const aliases = { ...(year.rotationAliases || {}) };
+        const created = [];
+        const aliases = {};
         const byResident = {};
         for (const sel of document.querySelectorAll("[data-map]")) {
           const row = draft.rows[Number(sel.dataset.map)];
@@ -1302,6 +1443,7 @@ function wire() {
           if (rid === "__new__") {
             rid = newId("r");
             residents.push({ id: rid, name: titleCase(row.name) });
+            created.push({ id: rid, name: titleCase(row.name) });
           }
           if (byResident[rid]) return toast(`${residents.find((r) => r.id === rid).name} è associato a più righe del file.`, "error");
           aliases[normName(row.name)] = rid;
@@ -1310,20 +1452,22 @@ function wire() {
         const n = Object.keys(byResident).length;
         if (!n) return toast("Associa almeno un nome del file a uno specializzando.", "warn");
         ui.rotDraft = null;
-        await act(() => store.saveYear({
-          ...year,
-          residents,
-          rotationAliases: aliases,
-          rotations: { ...(year.rotations || {}), [ayFrom]: { updatedAt: Date.now(), byResident } },
-        }), `Turni salvati per ${n} specializzandi.`);
+        await act(() => store.updateYear(year.id, (y) => ({
+          ...y,
+          residents: [...y.residents, ...created],
+          rotationAliases: { ...(y.rotationAliases || {}), ...aliases },
+          rotations: { ...(y.rotations || {}), [ayFrom]: { updatedAt: Date.now(), byResident } },
+        })), `Turni salvati per ${n} specializzandi.`);
         return render();
       }
       case "rot-remove": {
         const ay = viewAcademicYear();
         if (!confirm(`Rimuovere i turni dell'a.a. ${ay.label}?`)) return;
-        const rotations = { ...(year.rotations || {}) };
-        delete rotations[ay.from];
-        return act(() => store.saveYear({ ...year, rotations }), "Turni rimossi.");
+        return act(() => store.updateYear(year.id, (y) => {
+          const rotations = { ...(y.rotations || {}) };
+          delete rotations[ay.from];
+          return { ...y, rotations };
+        }), "Turni rimossi.");
       }
       case "comment-prefill": {
         const form = $("#comment-form");
@@ -1358,7 +1502,10 @@ function wire() {
         return;
       }
       case "backup-export":
-        return download(`backup-ferie-congressi_${D.todayIso()}.json`, JSON.stringify(state, null, 2), "application/json");
+        return backupNow();
+      case "backup-later":
+        try { localStorage.setItem("backup-snooze", String(Date.now() + 7 * DAY_MS)); } catch { /* ignorato */ }
+        return render();
     }
   });
 }

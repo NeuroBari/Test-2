@@ -473,6 +473,68 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .res-news .no .news-icon { background: var(--danger); }
 .res-news .msg .news-icon { background: var(--accent); }
 
+/* ---------- Scheda del giorno ---------- */
+.brush-btn.dettagli.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
+.av {
+  width: 32px; height: 32px; flex: none;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: .78rem; font-weight: 700; letter-spacing: .02em;
+  color: #fff; background: var(--ferie);
+}
+.av.congresso { background: var(--congr); }
+.av.pending { background: var(--surface); color: var(--ferie); box-shadow: inset 0 0 0 1.5px var(--ferie); }
+.av.congresso.pending { color: var(--congr); box-shadow: inset 0 0 0 1.5px var(--congr); }
+.av.same { outline: 2px solid var(--danger); outline-offset: 1px; }
+.day-sheet {
+  border: 0; padding: 18px 18px 16px;
+  width: min(460px, calc(100vw - 32px));
+  max-height: 85vh; overflow: auto;
+  border-radius: 18px;
+  background: var(--surface); color: var(--text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+}
+.day-sheet::backdrop { background: rgba(15, 20, 32, .45); }
+.day-sheet[open] { animation: sheet-in .22s ease-out; }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+.sheet-grip { display: none; }
+.sheet-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.sheet-head h3 { margin: 0; font-size: 1.3rem; }
+.sheet-hol { color: var(--danger); font-weight: 600; font-size: .85rem; }
+.sheet-you { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: var(--surface-2); border-radius: 12px; margin-bottom: 14px; }
+.sheet-you .muted { font-size: .85rem; margin-right: auto; }
+.day-sheet h4 { margin: 0 0 6px; font-size: .9rem; color: var(--muted); font-weight: 600; }
+.sheet-list { list-style: none; margin: 0 0 14px; padding: 0; }
+.sheet-list li { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.sheet-list li:last-child { border-bottom: 0; }
+.sheet-list .av { grid-row: span 2; }
+.sheet-who { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.sheet-who span { font-size: .85rem; color: var(--muted); }
+.sheet-tags { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+.sheet-tags .rot-chip { margin-left: 0; }
+.sheet-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+.sheet-ferie { background: var(--ferie-soft); color: var(--ferie); border-color: transparent; }
+.sheet-congr { background: var(--congr-soft); color: var(--congr); border-color: transparent; }
+.sheet-ferie.active { background: var(--ferie); color: #fff; }
+.sheet-congr.active { background: var(--congr); color: #fff; }
+.sheet-close { width: 100%; margin-top: 8px; }
+@media (max-width: 640px) {
+  /* sul telefono la scheda sale dal basso */
+  .day-sheet { margin: auto 0 0; width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .day-sheet[open] { animation: sheet-up .26s cubic-bezier(.2, .8, .2, 1); }
+  .sheet-grip { display: block; width: 40px; height: 4px; border-radius: 4px; background: var(--border); margin: -6px auto 12px; }
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .day-sheet[open] { animation: none; } }
+
+/* ---------- Promemoria di backup ---------- */
+.backup { border-left: 4px solid var(--primary); }
+.backup-reminder { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.backup-icon { font-size: 1.6rem; }
+.backup-text { flex: 1 1 280px; min-width: 0; }
+.backup-text p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
+.backup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* ---------- Commenti ---------- */
 textarea { width: 100%; resize: vertical; line-height: 1.4; }
 .form-row.end { justify-content: flex-end; }

@@ -83,9 +83,13 @@ function localStore(onChange) {
     data,
     // In locale tutti i dati sono già in memoria
     watchAcademicYear: () => Promise.resolve(),
-    async saveYear(y) {
-      data.years[y.id] = structuredClone(y);
+    // Modifica il gruppo partendo sempre dai dati più recenti (fn riceve una copia e la restituisce modificata)
+    async updateYear(id, fn) {
+      data.years[id] = structuredClone(fn(structuredClone(normalizeYear(id, data.years[id] || {}))));
       persist();
+    },
+    async exportAll() {
+      return structuredClone(data);
     },
     async ensureYears(list) {
       for (const y of list) data.years[y.id] = normalizeYear(y.id, { ...y, ...data.years[y.id] });
@@ -225,7 +229,30 @@ async function firebaseStore(onChange) {
     mode: "firebase",
     data,
     watchAcademicYear,
-    saveYear: (y) => fs.setDoc(fs.doc(db, "years", y.id), JSON.parse(JSON.stringify(y))),
+    // Transazione: rilegge il gruppo dal database e applica solo la modifica richiesta, così due
+    // rappresentanti che salvano quasi insieme non si sovrascrivono a vicenda (Firestore la ripete se serve)
+    updateYear: (id, fn) =>
+      fs.runTransaction(db, async (tx) => {
+        const ref = fs.doc(db, "years", id);
+        const snap = await tx.get(ref);
+        const current = normalizeYear(id, snap.exists() ? snap.data() : {});
+        tx.set(ref, JSON.parse(JSON.stringify(fn(current))));
+      }),
+    // Backup completo: tutti gli anni accademici, non solo quello visualizzato
+    exportAll: async () => {
+      const [ys, abs, cms] = await Promise.all(["years", "absences", "comments"].map((c) => fs.getDocs(fs.collection(db, c))));
+      const out = { years: {}, entries: {}, comments: {} };
+      ys.forEach((d) => (out.years[d.id] = normalizeYear(d.id, d.data())));
+      abs.forEach((d) => {
+        const { yearId, residentId, days = {} } = d.data();
+        for (const [date, v] of Object.entries(days)) {
+          const id = `${yearId}__${residentId}__${date}`;
+          out.entries[id] = { note: "", ...v, id, yearId, residentId, date };
+        }
+      });
+      cms.forEach((d) => (out.comments[d.id] = { ...d.data(), id: d.id }));
+      return out;
+    },
     // merge: se un altro dispositivo ha già creato il gruppo non ne tocca nomi e PIN
     ensureYears: (list) => batched(list, (b, y) => b.set(fs.doc(db, "years", y.id), y, { merge: true })),
     saveEntries: (list) =>
