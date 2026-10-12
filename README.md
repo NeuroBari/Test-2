@@ -44,7 +44,8 @@ La durata della scuola (4 anni) si modifica con `COURSE_YEARS` in `js/config.js`
 
 Il sito si può installare come un'app (PWA), senza passare dagli store. L'icona è il logo del neurone e il nome sulla schermata Home è «Ferie Neuro».
 
-- **Android / Chrome / Edge**: pulsante **Installa** in alto a destra, oppure menu del browser → *Installa app*.
+- **Android con Chrome, Edge, Opera o Samsung Internet**: pulsante **Installa** in alto a destra, oppure menu del browser → *Installa app*.
+- **Android con Firefox o altri browser**: il pulsante **Installa** mostra le istruzioni (menu ⋮ → *Installa* o *Aggiungi alla schermata Home*).
 - **iPhone / iPad**: con Safari, tasto **Condividi** → **Aggiungi alla schermata Home** (il pulsante *Installa* mostra le istruzioni).
 
 L'app si apre a schermo intero, si aggiorna da sola a ogni modifica del sito (con connessione si usa sempre la versione più recente) e, senza connessione, mostra l'ultima versione salvata. I file sono `manifest.webmanifest`, `sw.js`, `js/pwa.js` e la cartella `icons/` (icone generate da `img/logo.svg`).

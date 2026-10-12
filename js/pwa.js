@@ -4,6 +4,9 @@ const isStandalone = () =>
   window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const isIos = () =>
   /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isAndroid = () => /android/i.test(navigator.userAgent);
+// Chrome, Edge, Opera, Samsung Internet: propongono loro l'installazione al sito
+const isChromium = () => !!navigator.userAgentData || /chrome\/|chromium\//i.test(navigator.userAgent);
 
 export function setupPwa() {
   if ("serviceWorker" in navigator) {
@@ -27,8 +30,13 @@ export function setupPwa() {
     btn.hidden = true;
     deferred = null;
   });
-  // iPhone / iPad: l'installazione si fa dal menu Condividi di Safari, mostriamo le istruzioni
-  if (isIos()) btn.hidden = false;
+  // iPhone / iPad: l'installazione si fa dal menu Condividi di Safari, mostriamo le istruzioni.
+  // Android con Firefox o altri browser che non la propongono al sito: istruzioni per il menu.
+  const os = isIos() ? "ios" : isAndroid() && !isChromium() ? "android" : null;
+  if (os) {
+    btn.hidden = false;
+    help?.querySelectorAll("[data-os]").forEach((el) => { el.hidden = el.dataset.os !== os; });
+  }
 
   btn.addEventListener("click", async () => {
     if (deferred) {

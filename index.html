@@ -38,14 +38,25 @@
     </div>
   </header>
 
-  <dialog id="install-help" class="install-help" aria-labelledby="install-title">
+  <dialog id="install-help" class="install-help" aria-label="Installa l'app">
     <img src="icons/icon-192.png" alt="" width="64" height="64">
-    <h2 id="install-title">Installa l'app su iPhone</h2>
-    <ol>
-      <li>Apri questo sito con <strong>Safari</strong>.</li>
-      <li>Tocca il pulsante <strong>Condividi</strong> (il quadrato con la freccia verso l'alto).</li>
-      <li>Scegli <strong>Aggiungi alla schermata Home</strong> e poi <strong>Aggiungi</strong>.</li>
-    </ol>
+    <div data-os="ios">
+      <h2 id="install-title">Installa l'app su iPhone</h2>
+      <ol>
+        <li>Apri questo sito con <strong>Safari</strong>.</li>
+        <li>Tocca il pulsante <strong>Condividi</strong> (il quadrato con la freccia verso l'alto).</li>
+        <li>Scegli <strong>Aggiungi alla schermata Home</strong> e poi <strong>Aggiungi</strong>.</li>
+      </ol>
+    </div>
+    <div data-os="android" hidden>
+      <h2>Installa l'app su Android</h2>
+      <ol>
+        <li>Tocca il menu del browser (<strong>⋮</strong> o <strong>☰</strong>, in alto o in basso a destra).</li>
+        <li>Scegli <strong>Installa</strong> oppure <strong>Aggiungi alla schermata Home</strong>.</li>
+        <li>Conferma con <strong>Aggiungi</strong>.</li>
+      </ol>
+      <p class="muted small">Se la voce non c'è, apri il sito con <strong>Chrome</strong> e tocca il pulsante «Installa».</p>
+    </div>
     <p class="muted small">L'icona «Ferie Neuro» comparirà sulla schermata Home e il sito si aprirà a schermo intero, come un'app.</p>
     <button type="button" class="btn primary" data-close>Ho capito</button>
   </dialog>
