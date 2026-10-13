@@ -657,3 +657,8 @@ textarea { width: 100%; resize: vertical; line-height: 1.4; }
 .modal h2 { margin-bottom: 6px; }
 .modal .field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 14px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------- Notifiche push ---------- */
+.push-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
+.card .push-row:not(:only-child) { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.push-card { padding-top: 12px; padding-bottom: 12px; }

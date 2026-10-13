@@ -36,6 +36,22 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    // Iscrizioni alle notifiche push: dal sito si creano e si cancellano, ma non si leggono
+    // (le legge solo il programma delle notifiche, con la chiave di servizio)
+    match /pushSubs/{subId} {
+      allow read: if false;
+      allow create, update: if request.resource.data.endpoint is string
+                            && request.resource.data.endpoint.matches('https://.*')
+                            && request.resource.data.endpoint.size() <= 1000
+                            && request.resource.data.keys.p256dh is string
+                            && request.resource.data.keys.auth is string
+                            && request.resource.data.kind in ['res', 'rep']
+                            && request.resource.data.yearId is string
+                            && request.resource.data.residentId is string;
+      allow delete: if true;
+    }
+
+    // meta/notifier (stato del programma delle notifiche) e tutto il resto: solo lato server
     match /{document=**} {
       allow read, write: if false;
     }

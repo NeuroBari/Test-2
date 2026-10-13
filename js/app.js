@@ -3,6 +3,7 @@ import { FERIE_LIMIT, COURSE_YEARS, ACADEMIC_YEAR_START_MONTH } from "./config.j
 import * as D from "./dates.js";
 import { buildReport, exportPdf, exportCsv } from "./export.js";
 import { setupPwa } from "./pwa.js";
+import { pushStatus, targetKey, enablePush, disablePush } from "./push.js";
 import { parseRotationsFile, guessResident, monthKey, normName } from "./rotations.js";
 
 const TYPE_LABEL = { ferie: "Ferie", congresso: "Congresso" };
@@ -37,6 +38,17 @@ const ui = {
   view: prefs.view === "rep" ? "rep" : "resident",
   brush: "ferie",
 };
+// Link delle notifiche: ?view=rep|resident&year=<id gruppo>&month=AAAA-MM apre la vista giusta
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("view") && !q.has("year") && !q.has("month")) return;
+  if (["rep", "resident"].includes(q.get("view"))) ui.view = q.get("view");
+  if (q.get("year")) ui.yearId = q.get("year");
+  const m = /^(\d{4})-(\d{2})$/.exec(q.get("month") || "");
+  if (m) { ui.y = Number(m[1]); ui.m = Number(m[2]) - 1; }
+  history.replaceState(null, "", location.pathname);
+})();
+
 let state = { years: {}, entries: {}, comments: {} };
 let store = null;
 
@@ -370,6 +382,7 @@ function renderResident(year) {
     ${residentNewsHtml(year, rid)}
     ${deadlinesBannerHtml(year, rid)}
     ${residentCommentsHtml(year, rid, ay)}
+    ${pushRowHtml("res", year, rid) ? card(pushRowHtml("res", year, rid), "push-card") : ""}
     ${stats}
     ${card(`
       <div class="cal-head">
@@ -458,6 +471,35 @@ function residentCommentsHtml(year, rid, ay) {
       <p>${esc(c.text)}</p>
     </li>`).join("")}</ul>
   `, "comments");
+}
+
+/** Riga "Attiva notifiche" per lo specializzando (kind "res") o il rappresentante (kind "rep"). */
+function pushRowHtml(kind, year, rid = "") {
+  if (store.mode !== "firebase") return "";
+  const st = pushStatus(targetKey(kind, year.id, rid));
+  if (st === "unsupported") return "";
+  const what = kind === "res"
+    ? "quando il rappresentante approva o rifiuta le tue richieste o ti scrive"
+    : `quando arrivano nuove richieste o richieste di annullamento nel ${groupLabel(year)}`;
+  const body = {
+    on: `<span>🔔 <strong>Notifiche attive</strong> su questo dispositivo: ${what}.</span>
+         <button type="button" class="btn tiny ghost" data-action="push-off" data-kind="${kind}">Disattiva</button>`,
+    off: `<span>Ricevi una notifica ${what}.</span>
+          <button type="button" class="btn small" data-action="push-on" data-kind="${kind}">🔔 Attiva notifiche</button>`,
+    denied: `<span class="muted">🔕 Le notifiche sono bloccate per questo sito: riattivale dalle impostazioni del browser o del telefono.</span>`,
+    install: `<span class="muted">🔔 Su iPhone le notifiche funzionano solo con l'app installata: tocca <strong>Installa</strong> in alto, poi apri l'app dalla schermata Home.</span>`,
+  }[st];
+  return `<div class="push-row ${st}">${body}</div>`;
+}
+
+async function togglePush(kind, on) {
+  const year = currentYear();
+  if (!year) return;
+  const target = { kind, yearId: year.id, residentId: kind === "res" ? currentResidentId(year) || "" : "" };
+  if (kind === "res" && !target.residentId) return;
+  const ok = await act(() => (on ? enablePush(store, target) : disablePush(store, target)),
+    on ? "Notifiche attivate su questo dispositivo." : "Notifiche disattivate.");
+  if (ok) render();
 }
 
 /** Etichette accanto a una richiesta: motivo del rifiuto, in ritardo, annullamento richiesto. */
@@ -711,6 +753,7 @@ function renderRep(year) {
         <button type="button" class="btn primary" data-action="approve-clean" ${pendingClean.length ? "" : "disabled"}>Approva le richieste senza sovrapposizioni (${pendingClean.length})</button>
         <button type="button" class="btn" data-action="approve-month" ${pendingMonth.length ? "" : "disabled"}>Approva tutte le richieste del mese (${pendingMonth.length})</button>
       </div>
+      ${pushRowHtml("rep", year)}
     `)}
     ${backupReminderHtml()}
     ${repNewsHtml(year, idx)}
@@ -1454,6 +1497,8 @@ function wire() {
       return toggleDay(day.dataset.date);
     }
     if (e.target.closest('[data-action="ics"]')) return downloadIcs();
+    const push = e.target.closest('[data-action="push-on"], [data-action="push-off"]');
+    if (push) return togglePush(push.dataset.kind, push.dataset.action === "push-on");
     if (e.target.closest('[data-action="res-news-seen"]')) {
       const year = currentYear();
       const rid = year && currentResidentId(year);
@@ -1613,6 +1658,9 @@ function wire() {
         await setStatus(year, [entry], btn.dataset.status);
         return;
       }
+      case "push-on":
+      case "push-off":
+        return togglePush(btn.dataset.kind, btn.dataset.action === "push-on");
       case "cancel-ok": {
         const ids = btn.dataset.ids.split(",").filter((id) => state.entries[id]);
         if (!confirm(`Confermare l'annullamento di ${ids.length} ${ids.length === 1 ? "giorno" : "giorni"}? ${ids.length === 1 ? "Verrà cancellato" : "Verranno cancellati"} dal calendario.`)) return;

@@ -7,6 +7,10 @@
 //                        inizia il loro I anno (2026 = a.a. 2026/27). L'anno di corso
 //                        si calcola dall'anno accademico visualizzato.
 //   comments/{id}        { id, yearId, ay, residentId ("" = tutti), from, to, text, createdAt }
+//   pushSubs/{id}        { endpoint, keys: { p256dh, auth }, kind: "res" | "rep", yearId, residentId, createdAt }
+//                        iscrizioni alle notifiche push (una per dispositivo e destinatario);
+//                        dal sito si possono solo creare e cancellare, le legge il programma delle notifiche
+//   meta/notifier        stato del programma delle notifiche (solo lato server)
 //                        commenti del rappresentante (attivabili per anno di corso)
 //   absences/{yearId}__{residentId}__{ay}
 //                        { yearId, residentId, ay, days: { "YYYY-MM-DD": { type, status, note, updatedAt } } }
@@ -223,7 +227,8 @@ async function firebaseStore(onChange) {
     for (const { yearId, residentId, date, value } of items.map(valueOf)) {
       const ay = academicYear(date).from;
       const key = `${yearId}__${residentId}__${ay}`;
-      if (!docs.has(key)) docs.set(key, { yearId, residentId, ay, days: {} });
+      // touchedAt (ora del server): permette al programma delle notifiche di leggere solo i documenti cambiati
+      if (!docs.has(key)) docs.set(key, { yearId, residentId, ay, touchedAt: fs.serverTimestamp(), days: {} });
       docs.get(key).days[date] = value;
     }
     // merge: aggiorna solo i giorni toccati, senza sovrascrivere gli altri
@@ -271,6 +276,9 @@ async function firebaseStore(onChange) {
       })),
     saveComment: (c) => fs.setDoc(fs.doc(db, "comments", c.id), JSON.parse(JSON.stringify(c))),
     deleteComments: (ids) => batched(ids, (b, id) => b.delete(fs.doc(db, "comments", id))),
+    // Iscrizioni alle notifiche push: si possono creare e cancellare, ma non leggere dal sito
+    savePushSub: (id, sub) => fs.setDoc(fs.doc(db, "pushSubs", id), sub),
+    deletePushSub: (id) => fs.deleteDoc(fs.doc(db, "pushSubs", id)),
     deleteEntries: (ids) =>
       groupByDoc(ids, (id) => {
         const [yearId, residentId, date] = id.split("__");

@@ -29,3 +29,8 @@ export const ACADEMIC_YEAR_START_MONTH = 11;
 // ogni anno accademico (es. il 1° novembre il II anno diventa III anno);
 // dopo l'ultimo anno il gruppo resta consultabile solo negli anni passati.
 export const COURSE_YEARS = 4;
+
+// Chiave pubblica per le notifiche push (Web Push / VAPID). È pubblica per natura:
+// la chiave privata corrispondente è solo nei "Secrets" di GitHub (VAPID_PRIVATE_KEY)
+// e la usa il programma che invia le notifiche (.github/workflows/notifiche.yml).
+export const VAPID_PUBLIC_KEY = "BBQTyKYyuDst2Uh1ATQQpZ82oVSs3oN-wb2v525AazOmCr83uPIN03MlMVMVSK3CR0-hzoXoVReMdNRTXSLBjsQ";

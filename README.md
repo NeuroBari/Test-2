@@ -55,6 +55,32 @@ Il sito si può installare come un'app (PWA), senza passare dagli store. L'icona
 
 L'app si apre a schermo intero, si aggiorna da sola a ogni modifica del sito (con connessione si usa sempre la versione più recente) e, senza connessione, mostra l'ultima versione salvata. I file sono `manifest.webmanifest`, `sw.js`, `js/pwa.js` e la cartella `icons/` (icone generate da `img/logo.svg`).
 
+## Notifiche push
+
+Specializzandi e rappresentanti possono ricevere una notifica sul telefono o sul computer, anche con il sito chiuso:
+
+- **specializzando**: richiesta approvata o rifiutata (con il motivo), annullamento non accettato, nuovo messaggio del rappresentante;
+- **rappresentante**: nuove richieste del suo anno di corso (con quelle in ritardo) e richieste di annullamento.
+
+Ognuno le attiva dal pulsante **🔔 Attiva notifiche**: nella pagina dello specializzando, dopo aver scelto il nome, e nell'area rappresentante. Su iPhone e iPad funzionano solo con l'app installata nella schermata Home (iOS 16.4 o successivo).
+
+**Come funziona.** Ogni 5 minuti GitHub Actions esegue `notifier/notify.mjs` (`.github/workflows/notifiche.yml`). Il programma legge da Firebase solo i dati cambiati dall'ultima esecuzione, prepara un messaggio per ogni destinatario e lo invia ai dispositivi iscritti. Le novità arrivano quindi con 5–15 minuti di ritardo. Le iscrizioni (collezione `pushSubs`) si possono creare e cancellare dal sito ma non leggere: le legge solo il programma, con la chiave di servizio. Tutto è gratuito, sia su GitHub (repository pubblico) sia su Firebase.
+
+**Configurazione (una volta sola):**
+
+1. **Regole di Firestore**: nella console Firebase, *Firestore Database → Regole*, incolla di nuovo il contenuto di [`firestore.rules`](firestore.rules) e premi **Pubblica**.
+2. **Chiave di servizio**: *Impostazioni progetto → Account di servizio → Genera nuova chiave privata*. Si scarica un file `.json`. **È segreto**: non condividerlo e non caricarlo nel repository.
+3. **Secrets di GitHub**: nel repository, *Settings → Secrets and variables → Actions → New repository secret*:
+   - `FIREBASE_SERVICE_ACCOUNT` con tutto il contenuto del file `.json`;
+   - `VAPID_PRIVATE_KEY` con la chiave privata VAPID (la chiave pubblica corrispondente è `VAPID_PUBLIC_KEY` in `js/config.js`).
+4. **Prova**: scheda *Actions → Notifiche → Run workflow*. La prima esecuzione scrive solo il punto di partenza: da lì in poi ogni novità viene notificata.
+
+Finché i due secrets non sono impostati il programma non fa nulla e termina senza errori.
+
+Per cambiare le chiavi VAPID, genera una nuova coppia, metti la pubblica in `js/config.js` e la privata nel secret. Le iscrizioni esistenti smettono di funzionare e ognuno deve riattivare le notifiche.
+
+**Blocco dopo 60 giorni.** GitHub sospende le esecuzioni programmate nei repository pubblici senza modifiche da 60 giorni. Per evitarlo, se l'ultima modifica ha più di 45 giorni il programma aggiorna da solo il file `.github/keepalive`. Se le notifiche si fermassero comunque, GitHub manda una mail: basta aprire *Actions → Notifiche* e premere **Enable workflow**.
+
 ## Pubblicazione su GitHub Pages
 
 1. Su GitHub apri **Settings → Pages**.
@@ -113,5 +139,8 @@ js/rotations.js   lettura dell'Excel dei turni (SheetJS)
 js/pwa.js         app installabile: service worker e pulsante "Installa"
 sw.js             service worker (aggiornamenti e apertura senza rete)
 manifest.webmanifest, icons/   nome, colori e icone dell'app
+js/push.js        iscrizione alle notifiche push
 firestore.rules   regole di sicurezza Firestore
+notifier/         programma che invia le notifiche (Node.js, eseguito da GitHub Actions)
+.github/workflows/notifiche.yml   esecuzione ogni 5 minuti
 ```
