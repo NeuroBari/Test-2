@@ -8,12 +8,12 @@
 // Se lasciata vuota, il sito funziona in "modalità locale": i dati restano
 // salvati solo nel browser del dispositivo in uso.
 export const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyDSYhLzfbKEH77hqVj59SNetXbOq_Npk_I",
+  authDomain: "ferie-neurologia-bari.firebaseapp.com",
+  projectId: "ferie-neurologia-bari",
+  storageBucket: "ferie-neurologia-bari.firebasestorage.app",
+  messagingSenderId: "293835462349",
+  appId: "1:293835462349:web:ec199590a4fa30c84f3b84",
 };
 
 // Limite di giorni di ferie per anno accademico (oltre questa soglia viene
