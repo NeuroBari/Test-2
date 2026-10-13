@@ -6,7 +6,10 @@
 //                                 non accettato, nuovi messaggi del rappresentante
 //   "rep:<yearId>:"               il rappresentante: nuove richieste e richieste di annullamento
 
-export const SITE_URL = "https://neurobari.github.io/Test-2/";
+// Indirizzo del sito: su GitHub Actions si ricava dal nome del repository (GITHUB_REPOSITORY =
+// "Proprietario/nome"), così rinominando il repository non serve cambiare nulla
+const [owner, repo] = (process.env.GITHUB_REPOSITORY || "NeuroBari/Test-2").split("/");
+export const SITE_URL = process.env.SITE_URL || `https://${owner.toLowerCase()}.github.io/${repo}/`;
 // Tolleranza sugli orari scritti dai dispositivi (orologi non perfettamente allineati):
 // si rileggono gli ultimi 15 minuti e i duplicati si scartano con l'elenco "recent".
 export const MARGIN_MS = 15 * 60 * 1000;
