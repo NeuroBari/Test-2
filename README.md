@@ -11,13 +11,18 @@ Sito statico (GitHub Pages) per organizzare mese per mese le **ferie** e i **con
 - apre la **scheda del giorno** (la sua richiesta, i colleghi assenti con tipo, stato e reparto, e i pulsanti Ferie / Congresso / Rimuovi) con lo strumento «Dettagli», tenendo premuto sul giorno dal telefono o con il tasto destro dal computer;
 - trova un riquadro **Novità** con le richieste approvate o rifiutate e i nuovi messaggi del rappresentante dall'ultima visita;
 - con **"Aggiungi al mio calendario"** scarica un file .ics con i giorni approvati dell'anno accademico da importare in Google Calendar, Calendario di iPhone o Outlook;
-- vede lo stato di ogni richiesta (in attesa / approvata / rifiutata) e quanti colleghi del suo anno sono assenti in ogni giorno (👥);
+- vede lo stato di ogni richiesta (in attesa / approvata / rifiutata), con il **motivo del rifiuto** se il rappresentante l'ha scritto, e quanti colleghi del suo anno sono assenti in ogni giorno (👥);
+- i giorni **già approvati** non si cambiano né si cancellano da soli: toccandoli (o con «Chiedi annullamento» nell'elenco o nella scheda del giorno) si invia al rappresentante una **richiesta di annullamento**. Il giorno resta approvato (e nel PDF) finché il rappresentante non conferma; la richiesta si può ritirare;
+- vede le **scadenze per le richieste** fissate dal rappresentante, con il conto alla rovescia nei 90 giorni prima e quanti giorni ha già chiesto in quel periodo;
 - vede il contatore delle ferie dell'anno accademico (1° novembre – 31 ottobre), con un **avviso se supera i 30 giorni**. Per i congressi non c'è nessun limite.
 
 **Rappresentante** (area protetta da un PIN per ogni anno di corso)
 - tabella del mese con tutti gli specializzandi del suo anno: le **colonne arancioni indicano i giorni in cui più colleghi si sovrappongono**;
 - elenco delle sovrapposizioni, con i pulsanti Approva/Rifiuta per decidere caso per caso;
 - clic su una cella per cambiare stato (in attesa → approvato → rifiutato), approvazione per riga o in blocco (solo le richieste senza sovrapposizioni, oppure tutte);
+- **motivo del rifiuto**: quando rifiuta una richiesta (dalla tabella o dall'elenco delle sovrapposizioni) può scrivere il motivo, facoltativo, che lo specializzando vede nella sua pagina e tra le novità;
+- **richieste di annullamento**: un riquadro elenca i giorni approvati che gli specializzandi chiedono di annullare, con «Conferma annullamento» (il giorno viene cancellato) o «Mantieni» (resta approvato e lo specializzando lo vede tra le novità). Nella tabella questi giorni sono barrati;
+- **scadenze per le richieste**: per esempio «Ferie estive, dal 1° luglio al 31 agosto, entro il 31 maggio», solo per le ferie o anche per i congressi. Le richieste per quel periodo inviate dopo la scadenza sono accettate ma segnate **«In ritardo»** (pallino arancione nella tabella), e per ogni scadenza si vede quanti giorni sono stati richiesti e quanti in ritardo;
 - avviso per chi supera i 30 giorni di ferie e richiesta di conferma se un'approvazione li fa superare;
 - **download del riepilogo dei giorni approvati** in PDF (mese o anno accademico, con il dettaglio mese per mese e lo spazio per la firma) o in CSV per Excel;
 - **commenti del rappresentante** (da attivare in *Impostazioni*, per ogni anno di corso): servono a segnalare problemi nell'approvazione. Ogni commento può riguardare uno specializzando o tutti, con un periodo facoltativo, e si può scrivere direttamente dall'elenco delle sovrapposizioni con il pulsante *Commenta*. Lo specializzando interessato li vede nella sua pagina e, se i commenti sono attivi, finiscono nel PDF nella sezione "Commenti del rappresentante";
@@ -91,6 +96,7 @@ Il piano gratuito Spark consente 50.000 letture e 20.000 scritture al giorno e 1
 - Le modifiche ai dati del gruppo (nomi, PIN, turni, impostazioni) sono salvate con una transazione: se due rappresentanti salvano quasi insieme, nessuna delle due modifiche va persa.
 - Il PIN del rappresentante e la scelta del nome sono una protezione "di cortesia", adatta a un gruppo di colleghi che si fida l'uno dell'altro. Chi conosce il link e sa usare gli strumenti per sviluppatori potrebbe modificare i dati direttamente. Se serve una protezione reale, il passo successivo è aggiungere il login con Firebase Authentication e restringere le regole Firestore.
 - Le date sono salvate come `AAAA-MM-GG`, nel fuso orario del dispositivo.
+- Il sito chiede ai motori di ricerca di non indicizzarlo (`noindex`), perché contiene nomi di persone. Resta comunque raggiungibile da chiunque abbia il link.
 
 ## Struttura
 

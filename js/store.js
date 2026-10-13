@@ -1,7 +1,8 @@
 // Archivio dati: Firebase Firestore (condiviso) oppure localStorage (locale).
 //
 // Modello dati (Firestore)
-//   years/{yearId}       { id, startYear, residents: [{ id, name }], pinHash, commentsEnabled }
+//   years/{yearId}       { id, startYear, residents: [{ id, name }], pinHash, commentsEnabled,
+//                          deadlines: [{ id, label, from, to, due, congressi }] }
 //                        un gruppo di specializzandi (coorte): startYear è l'anno in cui
 //                        inizia il loro I anno (2026 = a.a. 2026/27). L'anno di corso
 //                        si calcola dall'anno accademico visualizzato.
@@ -13,9 +14,13 @@
 //                        così aprire il sito costa una lettura per specializzando.
 //                        type:   "ferie" | "congresso"
 //                        status: "pending" | "approved" | "rejected"
+//                        reason: motivo del rifiuto (scritto dal rappresentante)
+//                        late:   richiesta inviata dopo la scadenza del periodo (years.deadlines)
+//                        cancel: lo specializzando chiede di annullare un giorno già approvato
+//                        cancelDenied: il rappresentante ha mantenuto il giorno approvato
 //
 // Verso l'app i dati sono esposti come richieste "piatte":
-//   entries[id] = { id, yearId, residentId, date, type, status, note, updatedAt }
+//   entries[id] = { id, yearId, residentId, date, type, status, note, reason, late, cancel, cancelDenied, updatedAt }
 // con id = `${yearId}__${residentId}__${date}`.
 
 import { FIREBASE_CONFIG } from "./config.js";
@@ -37,7 +42,7 @@ export async function createStore(onChange) {
   return localStore(onChange);
 }
 
-const normalizeYear = (id, y) => ({ id, residents: [], pinHash: "", commentsEnabled: false, ...y });
+const normalizeYear = (id, y) => ({ id, residents: [], pinHash: "", commentsEnabled: false, deadlines: [], ...y });
 
 // ---------------------------------------------------------------------------
 // Modalità locale
@@ -258,7 +263,11 @@ async function firebaseStore(onChange) {
     saveEntries: (list) =>
       groupByDoc(list, (e) => ({
         ...e,
-        value: { type: e.type, status: e.status, note: e.note || "", updatedAt: e.updatedAt || Date.now() },
+        // Tutti i campi sempre presenti: con il merge di Firestore un campo omesso resterebbe com'era
+        value: {
+          type: e.type, status: e.status, note: e.note || "", reason: e.reason || "",
+          late: !!e.late, cancel: !!e.cancel, cancelDenied: !!e.cancelDenied, updatedAt: e.updatedAt || Date.now(),
+        },
       })),
     saveComment: (c) => fs.setDoc(fs.doc(db, "comments", c.id), JSON.parse(JSON.stringify(c))),
     deleteComments: (ids) => batched(ids, (b, id) => b.delete(fs.doc(db, "comments", id))),

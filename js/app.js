@@ -124,6 +124,43 @@ function commentsOf(year, ay) {
     .sort((a, b) => start(a).localeCompare(start(b)) || a.createdAt - b.createdAt);
 }
 
+// ----- Scadenze delle richieste e nuove richieste ----------------------------
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysBetween = (a, b) => Math.round((D.parse(b) - D.parse(a)) / DAY_MS);
+
+/** Scadenza che riguarda una richiesta di quel tipo in quella data (le scadenze valgono per le ferie, e per i congressi solo se indicato). */
+function deadlineFor(year, type, date) {
+  return (year.deadlines || []).find((d) => date >= d.from && date <= d.to && (type === "ferie" || d.congressi));
+}
+const isLate = (year, type, date) => {
+  const d = deadlineFor(year, type, date);
+  return !!d && D.todayIso() > d.due;
+};
+
+function newEntry(year, rid, date, type, note = "") {
+  return {
+    id: entryId(year.id, rid, date), yearId: year.id, residentId: rid, date, type, status: "pending", note,
+    reason: "", late: isLate(year, type, date), cancel: false, cancelDenied: false, updatedAt: Date.now(),
+  };
+}
+
+/** Avvisi dopo una nuova richiesta: oltre la scadenza del periodo e oltre il limite di ferie. */
+function afterRequest(year, rid, list) {
+  const msgs = [];
+  const late = list.filter((e) => e.late);
+  if (late.length) {
+    const d = deadlineFor(year, late[0].type, late[0].date);
+    msgs.push(`Richiesta oltre la scadenza del ${D.fmtDay(d.due)}${d.label ? ` (${d.label})` : ""}: il rappresentante la vedrà come «in ritardo».`);
+  }
+  const ferie = list.filter((e) => e.type === "ferie");
+  if (ferie.length) {
+    const ay = D.academicYear(ferie[ferie.length - 1].date);
+    const n = countDays(year.id, rid, "ferie", ay, ["approved", "pending"]);
+    if (n > FERIE_LIMIT) msgs.push(`Attenzione: ${n} giorni di ferie nell'a.a. ${ay.label}, oltre il limite di ${FERIE_LIMIT}.`);
+  }
+  if (msgs.length) toast(msgs.join(" "), "warn");
+}
+
 /** Reparto/rotazione dello specializzando nel mese della data, dall'Excel dei turni ("" se non caricato). */
 function rotationOf(year, rid, date) {
   return year.rotations?.[D.academicYear(date).from]?.byResident?.[rid]?.[date.slice(0, 7)] || "";
@@ -312,15 +349,17 @@ function renderResident(year) {
   ].map(([k, l]) => `<button type="button" class="brush-btn ${k} ${ui.brush === k ? "active" : ""}" data-brush="${k}" aria-pressed="${ui.brush === k}">${l}</button>`).join("");
 
   const myMonth = idx.all.filter((e) => e.residentId === rid && e.date.startsWith(`${ui.y}-${String(ui.m + 1).padStart(2, "0")}`));
-  const groups = D.groupRanges(myMonth, (e) => `${e.type}|${e.status}|${e.note || ""}`);
+  const groups = D.groupRanges(myMonth, (e) => `${e.type}|${e.status}|${e.note || ""}|${e.reason || ""}|${!!e.cancel}|${!!e.late}`);
   const list = groups.length
     ? `<ul class="req-list">${groups.map((g) => {
         const e = g.items[0];
+        const btn = e.status !== "approved" ? "Annulla" : e.cancel ? "Ritira annullamento" : "Chiedi annullamento";
         return `<li>
           <span class="dot ${e.type}"></span>
-          <span class="req-main"><strong>${TYPE_LABEL[e.type]}</strong> · ${D.fmtRange(g.from, g.to)} <span class="muted">(${g.items.length} gg)</span>${e.note ? ` <span class="muted">— ${esc(e.note)}</span>` : ""}</span>
+          <span class="req-main"><strong>${TYPE_LABEL[e.type]}</strong> · ${D.fmtRange(g.from, g.to)} <span class="muted">(${g.items.length} gg)</span>${e.note ? ` <span class="muted">— ${esc(e.note)}</span>` : ""}
+            ${entryFlagsHtml(e)}</span>
           <span class="status ${e.status}">${STATUS_LABEL[e.status]}</span>
-          <button type="button" class="btn tiny ghost" data-action="cancel-group" data-ids="${esc(g.items.map((i) => i.id).join(","))}">Annulla</button>
+          <button type="button" class="btn tiny ghost" data-action="cancel-group" data-ids="${esc(g.items.map((i) => i.id).join(","))}">${btn}</button>
         </li>`;
       }).join("")}</ul>`
     : `<p class="muted">Nessuna richiesta in questo mese.</p>`;
@@ -329,6 +368,7 @@ function renderResident(year) {
     ${picker}
     ${alert}
     ${residentNewsHtml(year, rid)}
+    ${deadlinesBannerHtml(year, rid)}
     ${residentCommentsHtml(year, rid, ay)}
     ${stats}
     ${card(`
@@ -387,13 +427,15 @@ function residentNewsHtml(year, rid) {
     ? Object.values(state.comments || {}).filter((c) => c.yearId === year.id && (!c.residentId || c.residentId === rid) && c.createdAt > since)
     : [];
   if (!decided.length && !comments.length) return "";
-  const groups = D.groupRanges(decided, (e) => `${e.type}|${e.status}`);
+  const groups = D.groupRanges(decided.filter((e) => !e.cancel), (e) => `${e.type}|${e.status}|${e.reason || ""}|${!!e.cancelDenied}`);
   const items = [
     ...groups.map((g) => {
       const e = g.items[0];
       const ok = e.status === "approved";
-      return `<li class="${ok ? "ok" : "no"}"><span class="news-icon" aria-hidden="true">${ok ? "✓" : "✕"}</span>
-        <span><strong>${TYPE_LABEL[e.type]} ${D.fmtRange(g.from, g.to)}</strong> ${ok ? "approvate" : "rifiutate"}${g.items.length > 1 ? ` (${g.items.length} gg)` : ""}</span></li>`;
+      const what = e.cancelDenied ? "restano approvate: annullamento non accettato" : ok ? "approvate" : "rifiutate";
+      return `<li class="${ok && !e.cancelDenied ? "ok" : "no"}"><span class="news-icon" aria-hidden="true">${ok && !e.cancelDenied ? "✓" : "✕"}</span>
+        <span><strong>${TYPE_LABEL[e.type]} ${D.fmtRange(g.from, g.to)}</strong> ${what}${g.items.length > 1 ? ` (${g.items.length} gg)` : ""}${
+          e.status === "rejected" && e.reason ? `<br><span class="reason">Motivo: ${esc(e.reason)}</span>` : ""}</span></li>`;
     }),
     ...comments.map((c) => `<li class="msg"><span class="news-icon" aria-hidden="true">✉</span><span>Nuovo messaggio del rappresentante${c.residentId ? "" : " per tutti"}: “${esc(c.text.length > 90 ? c.text.slice(0, 90) + "…" : c.text)}”</span></li>`),
   ].join("");
@@ -416,6 +458,41 @@ function residentCommentsHtml(year, rid, ay) {
       <p>${esc(c.text)}</p>
     </li>`).join("")}</ul>
   `, "comments");
+}
+
+/** Etichette accanto a una richiesta: motivo del rifiuto, in ritardo, annullamento richiesto. */
+function entryFlagsHtml(e) {
+  return [
+    e.status === "rejected" && e.reason && `<span class="reason">Motivo: ${esc(e.reason)}</span>`,
+    e.cancel && `<span class="flag cancel">↩ Annullamento richiesto</span>`,
+    e.late && e.status === "pending" && `<span class="flag late">In ritardo</span>`,
+  ].filter(Boolean).join(" ");
+}
+
+/** Scadenze in arrivo (fino a 90 giorni prima) o appena passate (fino alla fine del periodo). */
+function activeDeadlines(year) {
+  const today = D.todayIso();
+  return (year.deadlines || [])
+    .filter((d) => today <= d.to && (today > d.due || daysBetween(today, d.due) <= 90))
+    .sort((a, b) => a.due.localeCompare(b.due));
+}
+
+function deadlinesBannerHtml(year, rid) {
+  const list = activeDeadlines(year);
+  if (!list.length) return "";
+  const today = D.todayIso();
+  const items = list.map((d) => {
+    const mine = Object.values(state.entries).filter((e) => e.yearId === year.id && e.residentId === rid &&
+      e.date >= d.from && e.date <= d.to && (e.type === "ferie" || d.congressi) && e.status !== "rejected").length;
+    const what = `<strong>${esc(d.label || "Richieste")}</strong> <span class="muted">(${D.fmtRange(d.from, d.to)}${d.congressi ? ", ferie e congressi" : ", ferie"})</span>`;
+    const left = daysBetween(today, d.due);
+    const status = today > d.due
+      ? `scadenza del <strong>${D.fmtDay(d.due)}</strong> passata: puoi ancora inviare richieste, ma il rappresentante le vedrà come «in ritardo».`
+      : `invia le richieste entro il <strong>${D.fmtDay(d.due)}</strong> · <span class="countdown">${left === 0 ? "scade oggi" : left === 1 ? "manca 1 giorno" : `mancano ${left} giorni`}</span>`;
+    return `<li class="${today > d.due ? "past" : left <= 7 ? "soon" : ""}"><span class="dl-icon" aria-hidden="true">${today > d.due ? "⏰" : "📆"}</span>
+      <span>${what}: ${status}<br><span class="muted small">Hai richiesto ${mine} ${mine === 1 ? "giorno" : "giorni"} in questo periodo.</span></span></li>`;
+  }).join("");
+  return card(`<h3>Scadenze per le richieste</h3><ul class="deadlines">${items}</ul>`, "deadline");
 }
 
 function legendHtml() {
@@ -446,16 +523,18 @@ function calendarHtml(year, rid, idx) {
       hol && "holiday",
       date === today && "today",
       mine && `has ${mine.type} ${mine.status}`,
+      mine?.cancel && "cancel",
     ].filter(Boolean).join(" ");
     const titleParts = [D.fmtDay(date)];
     if (hol) titleParts.push(hol);
-    if (mine) titleParts.push(`${TYPE_LABEL[mine.type]} – ${STATUS_LABEL[mine.status]}${mine.note ? ` (${mine.note})` : ""}`);
+    if (mine) titleParts.push(`${TYPE_LABEL[mine.type]} – ${STATUS_LABEL[mine.status]}${mine.note ? ` (${mine.note})` : ""}${
+      mine.status === "rejected" && mine.reason ? `\nMotivo: ${mine.reason}` : ""}${mine.cancel ? "\nAnnullamento richiesto" : ""}`);
     if (others.length) titleParts.push("Assenti: " + others.map((e) => `${nameOf(year, e.residentId)} (${TYPE_LABEL[e.type]})`).join(", "));
     if (sameRot.length) titleParts.push(`Nel tuo stesso reparto: ${sameRot.map((e) => nameOf(year, e.residentId)).join(", ")}`);
     cells += `<button type="button" class="day ${cls}" data-date="${date}" title="${esc(titleParts.join("\n"))}">
       <span class="day-num">${d}</span>
       ${hol ? `<span class="day-hol">${esc(hol)}</span>` : ""}
-      ${mine ? `<span class="pill ${mine.type} ${mine.status}"><span class="long">${mine.type === "ferie" ? "Ferie" : "Congr."}</span><span class="short">${mine.type === "ferie" ? "F" : "C"}</span> ${STATUS_ICON[mine.status]}</span>` : ""}
+      ${mine ? `<span class="pill ${mine.type} ${mine.status}"><span class="long">${mine.type === "ferie" ? "Ferie" : "Congr."}</span><span class="short">${mine.type === "ferie" ? "F" : "C"}</span> ${mine.cancel ? "↩" : STATUS_ICON[mine.status]}</span>` : ""}
       ${others.length ? `<span class="others ${sameRot.length ? "high" : ""}">👥 ${others.length}${sameRot.length ? " ⚠" : ""}</span>` : ""}
     </button>`;
   }
@@ -547,8 +626,17 @@ function renderRep(year) {
     const cells = dates.map((date) => {
       const e = state.entries[entryId(year.id, r.id, date)];
       if (!e) return `<td class="${colCls(date)}"></td>`;
-      const title = `${r.name} · ${D.fmtDay(date)}\n${TYPE_LABEL[e.type]} – ${STATUS_LABEL[e.status]}${e.note ? `\n${e.note}` : ""}\nClic: ${STATUS_LABEL[NEXT_STATUS[e.status]].toLowerCase()}`;
-      return `<td class="${colCls(date)}"><button type="button" class="cell ${e.type} ${e.status}" data-cell="${esc(e.id)}" title="${esc(title)}" aria-label="${esc(title)}">${e.type === "ferie" ? "F" : "C"}</button></td>`;
+      const title = [
+        `${r.name} · ${D.fmtDay(date)}`,
+        `${TYPE_LABEL[e.type]} – ${STATUS_LABEL[e.status]}`,
+        e.note,
+        e.status === "rejected" && e.reason && `Motivo: ${e.reason}`,
+        e.late && e.status === "pending" && "Richiesta in ritardo (dopo la scadenza)",
+        e.cancel && "Annullamento richiesto dallo specializzando",
+        `Clic: ${STATUS_LABEL[NEXT_STATUS[e.status]].toLowerCase()}`,
+      ].filter(Boolean).join("\n");
+      const flags = [e.cancel && "cancel", e.late && e.status === "pending" && "late"].filter(Boolean).join(" ");
+      return `<td class="${colCls(date)}"><button type="button" class="cell ${e.type} ${e.status} ${flags}" data-cell="${esc(e.id)}" title="${esc(title)}" aria-label="${esc(title)}">${e.type === "ferie" ? "F" : "C"}</button></td>`;
     }).join("");
     const fA = countDays(year.id, r.id, "ferie", ay, ["approved"]);
     const fP = countDays(year.id, r.id, "ferie", ay, ["pending"]);
@@ -588,7 +676,7 @@ function renderRep(year) {
             ${groups.map((g) => `<span class="badge high">Stesso reparto: ${esc(g.name)}</span>`).join("")}</div>
           <ul>${list.sort((a, b) => nameOf(year, a.residentId).localeCompare(nameOf(year, b.residentId), "it")).map((e) => `<li>
             <span class="dot ${e.type}"></span>
-            <span class="req-main"><strong>${esc(nameOf(year, e.residentId))}</strong> · ${TYPE_LABEL[e.type]}${e.note ? ` <span class="muted">— ${esc(e.note)}</span>` : ""}
+            <span class="req-main"><strong>${esc(nameOf(year, e.residentId))}</strong> · ${TYPE_LABEL[e.type]}${e.note ? ` <span class="muted">— ${esc(e.note)}</span>` : ""} ${entryFlagsHtml(e)}
               ${rotationOf(year, e.residentId, date) ? `<span class="rot-chip ${sharedIds.has(e.id) ? "high" : ""}">${esc(rotationOf(year, e.residentId, date))}</span>` : ""}</span>
             <span class="status ${e.status}">${STATUS_LABEL[e.status]}</span>
             <span class="actions">
@@ -626,6 +714,7 @@ function renderRep(year) {
     `)}
     ${backupReminderHtml()}
     ${repNewsHtml(year, idx)}
+    ${repCancelHtml(year, idx)}
     ${card(`<h3>${D.monthLabel(ui.y, ui.m)}</h3>${filterChips}${table}${legendHtml()}`)}
     ${card(`<h3>Sovrapposizioni · ${D.monthLabel(ui.y, ui.m)}</h3>${conflicts}`, "conflicts")}
     ${card(annualHtml(year, idx, residents, ay), "annual")}
@@ -646,6 +735,7 @@ function renderRep(year) {
       </div>
       ${year.commentsEnabled ? `<p class="muted small">Il PDF include i commenti del rappresentante relativi al periodo.</p>` : ""}
     `)}
+    ${card(repDeadlinesHtml(year, idx), "deadlines-card")}
     ${card(`
       <h3>Specializzandi del ${groupLabel(year)}</h3>
       ${residents.length ? `<ul class="res-list">${residentList}</ul>` : ""}
@@ -681,7 +771,6 @@ function renderRep(year) {
 
 // Promemoria di backup: il piano gratuito di Firebase non conserva copie dei dati,
 // quindi una volta al mese si ricorda al rappresentante di scaricarne una (per dispositivo).
-const DAY_MS = 24 * 60 * 60 * 1000;
 const BACKUP_EVERY_DAYS = 30;
 const readNum = (k) => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
 
@@ -727,7 +816,9 @@ function lastSeen(year) {
 function repNewsHtml(year, idx) {
   const since = lastSeen(year);
   const fresh = idx.all.filter((e) => e.status === "pending" && (e.updatedAt || 0) > since);
-  if (!fresh.length) return "";
+  const freshCancel = idx.all.filter((e) => e.cancel && e.status === "approved" && (e.updatedAt || 0) > since);
+  if (!fresh.length && !freshCancel.length) return "";
+  const late = fresh.filter((e) => e.late).length;
   const byRes = new Map();
   for (const e of fresh) {
     if (!byRes.has(e.residentId)) byRes.set(e.residentId, []);
@@ -741,8 +832,61 @@ function repNewsHtml(year, idx) {
       <h3>Novità ${since ? `dal tuo ultimo accesso <span class="muted small">(${new Date(since).toLocaleDateString("it-IT", { day: "numeric", month: "short" })})</span>` : "da approvare"}</h3>
       <button type="button" class="btn tiny ghost" data-action="news-seen">Segna come viste</button>
     </div>
-    <p><strong>${fresh.length}</strong> ${fresh.length === 1 ? "nuovo giorno richiesto" : "nuovi giorni richiesti"} da <strong>${byRes.size}</strong> ${byRes.size === 1 ? "specializzando" : "specializzandi"}${sharedDays.size ? ` · <span class="danger-text"><strong>${sharedDays.size}</strong> ${sharedDays.size === 1 ? "giorno" : "giorni"} con colleghi dello stesso reparto</span>` : ""}</p>
-    <ul class="news-list">${items}</ul>`, "news");
+    ${fresh.length ? `<p><strong>${fresh.length}</strong> ${fresh.length === 1 ? "nuovo giorno richiesto" : "nuovi giorni richiesti"} da <strong>${byRes.size}</strong> ${byRes.size === 1 ? "specializzando" : "specializzandi"}${sharedDays.size ? ` · <span class="danger-text"><strong>${sharedDays.size}</strong> ${sharedDays.size === 1 ? "giorno" : "giorni"} con colleghi dello stesso reparto</span>` : ""}${late ? ` · <span class="flag late">${late} in ritardo</span>` : ""}</p>
+    <ul class="news-list">${items}</ul>` : ""}
+    ${freshCancel.length ? `<p>↩ <strong>${freshCancel.length}</strong> ${freshCancel.length === 1 ? "giorno approvato" : "giorni approvati"} con richiesta di annullamento: vedi il riquadro qui sotto.</p>` : ""}`, "news");
+}
+
+/** Richieste di annullamento di giorni già approvati (anno accademico visualizzato). */
+function repCancelHtml(year, idx) {
+  const list = idx.all.filter((e) => e.cancel && e.status === "approved");
+  if (!list.length) return "";
+  const groups = D.groupRanges(list, (e) => `${e.residentId}|${e.type}`)
+    .sort((a, b) => a.from.localeCompare(b.from));
+  return card(`
+    <h3>Richieste di annullamento <span class="muted small">(${list.length} ${list.length === 1 ? "giorno" : "giorni"})</span></h3>
+    <p class="muted small">Giorni già approvati che lo specializzando chiede di annullare. Restano approvati (e nel PDF) finché non confermi.</p>
+    <ul class="req-list">${groups.map((g) => {
+      const e = g.items[0];
+      const ids = esc(g.items.map((i) => i.id).join(","));
+      return `<li>
+        <span class="dot ${e.type}"></span>
+        <span class="req-main"><strong>${esc(nameOf(year, e.residentId))}</strong> · ${TYPE_LABEL[e.type]} ${D.fmtRange(g.from, g.to)} <span class="muted">(${g.items.length} gg)</span></span>
+        <span class="actions">
+          <button type="button" class="btn tiny ok" data-action="cancel-ok" data-ids="${ids}">Conferma annullamento</button>
+          <button type="button" class="btn tiny ghost" data-action="cancel-no" data-ids="${ids}">Mantieni</button>
+        </span>
+      </li>`;
+    }).join("")}</ul>`, "cancel-card");
+}
+
+/** Scadenze per le richieste (es. ferie estive entro il 31 maggio). */
+function repDeadlinesHtml(year, idx) {
+  const today = D.todayIso();
+  const list = [...(year.deadlines || [])].sort((a, b) => b.due.localeCompare(a.due));
+  const rows = list.map((d) => {
+    const inPeriod = idx.all.filter((e) => e.date >= d.from && e.date <= d.to && (e.type === "ferie" || d.congressi) && e.status !== "rejected");
+    const late = inPeriod.filter((e) => e.late).length;
+    const left = daysBetween(today, d.due);
+    const state = today > d.to ? "periodo concluso" : today > d.due ? "scaduta" : left === 0 ? "scade oggi" : `mancano ${left} giorni`;
+    return `<li>
+      <span class="req-main"><strong>${esc(d.label || "Richieste")}</strong> · ${D.fmtRange(d.from, d.to)}${d.congressi ? " · ferie e congressi" : " · ferie"}
+        <br><span class="muted small">Entro il ${D.fmtDay(d.due)} · ${state} · ${inPeriod.length} ${inPeriod.length === 1 ? "giorno richiesto" : "giorni richiesti"}${late ? `, <strong class="danger-text">${late} in ritardo</strong>` : ""}</span></span>
+      <button type="button" class="btn tiny ghost danger-text" data-action="remove-deadline" data-id="${esc(d.id)}">Elimina</button>
+    </li>`;
+  }).join("");
+  return `
+    <h3>Scadenze per le richieste</h3>
+    <p class="muted small">Ad esempio: ferie estive dal 1° luglio al 31 agosto da richiedere entro il 31 maggio. Gli specializzandi vedono il conto alla rovescia nei 90 giorni prima della scadenza; le richieste arrivate dopo sono segnate <span class="flag late">In ritardo</span>.</p>
+    ${rows ? `<ul class="req-list">${rows}</ul>` : ""}
+    <form id="deadline-form" class="form-row">
+      <label class="field grow"><span>Nome</span><input name="label" maxlength="60" placeholder="Es. Ferie estive" data-keep="dl-label"></label>
+      <label class="field"><span>Periodo dal</span><input type="date" name="from" required data-keep="dl-from"></label>
+      <label class="field"><span>al</span><input type="date" name="to" required data-keep="dl-to"></label>
+      <label class="field"><span>Richieste entro il</span><input type="date" name="due" required data-keep="dl-due"></label>
+      <label class="check"><input type="checkbox" name="congressi" data-keep="dl-congr"> Anche per i congressi</label>
+      <button class="btn primary">Aggiungi scadenza</button>
+    </form>`;
 }
 
 // Panoramica dell'anno accademico: giorni di assenza per specializzando e per mese
@@ -917,19 +1061,43 @@ function openDaySheet(date) {
     <header class="sheet-head"><h3>${longDay(date)}</h3>${hol ? `<span class="sheet-hol">${esc(hol)}</span>` : ""}</header>
     <div class="sheet-you">
       <span class="muted">La tua richiesta</span>
-      ${mine ? `<span class="pill ${mine.type} ${mine.status}">${TYPE_LABEL[mine.type]} ${STATUS_ICON[mine.status]}</span> <span class="status ${mine.status}">${STATUS_LABEL[mine.status]}</span>` : "<span>nessuna</span>"}
+      ${mine ? `<span class="pill ${mine.type} ${mine.status}">${TYPE_LABEL[mine.type]} ${STATUS_ICON[mine.status]}</span> <span class="status ${mine.status}">${STATUS_LABEL[mine.status]}</span> ${entryFlagsHtml(mine)}` : "<span>nessuna</span>"}
     </div>
     <h4>Colleghi assenti${others.length ? ` (${others.length})` : ""}</h4>
     ${others.length ? `<ul class="sheet-list">${others.map(li).join("")}</ul>` : `<p class="muted">Nessun collega del tuo anno è assente.</p>`}
-    <div class="sheet-actions">
-      <button type="button" class="btn sheet-ferie ${mine?.type === "ferie" ? "active" : ""}" data-sheet="ferie">Ferie</button>
-      <button type="button" class="btn sheet-congr ${mine?.type === "congresso" ? "active" : ""}" data-sheet="congresso">Congresso</button>
-      <button type="button" class="btn ghost danger-text" data-sheet="rimuovi" ${mine ? "" : "disabled"}>Rimuovi</button>
-    </div>
+    ${mine?.status === "approved"
+      ? `<div class="sheet-actions one">
+          <button type="button" class="btn ${mine.cancel ? "" : "danger"}" data-sheet="rimuovi">${mine.cancel ? "Ritira la richiesta di annullamento" : "Chiedi l'annullamento al rappresentante"}</button>
+        </div>`
+      : `<div class="sheet-actions">
+          <button type="button" class="btn sheet-ferie ${mine?.type === "ferie" ? "active" : ""}" data-sheet="ferie">Ferie</button>
+          <button type="button" class="btn sheet-congr ${mine?.type === "congresso" ? "active" : ""}" data-sheet="congresso">Congresso</button>
+          <button type="button" class="btn ghost danger-text" data-sheet="rimuovi" ${mine ? "" : "disabled"}>Rimuovi</button>
+        </div>`}
     <button type="button" class="btn ghost sheet-close" data-sheet="chiudi">Chiudi</button>`;
   sheet.dataset.date = date;
   sheet.dataset.openedAt = String(Date.now());
   if (!sheet.open) sheet.showModal();
+}
+
+/**
+ * Giorni già approvati: lo specializzando non li cambia né li cancella da solo, ma chiede al
+ * rappresentante di annullarli (restano approvati finché lui non conferma). Se l'annullamento è
+ * già stato chiesto per tutti, propone di ritirare la richiesta.
+ */
+async function askCancel(year, entries) {
+  if (!entries.length) return;
+  const n = entries.length;
+  if (entries.every((e) => e.cancel)) {
+    if (!confirm(n === 1 ? `Ritirare la richiesta di annullamento per ${D.fmtDay(entries[0].date)}?` : `Ritirare la richiesta di annullamento per ${n} giorni?`)) return;
+    // updatedAt invariato: per lo specializzando non è una "novità" del rappresentante
+    await act(() => store.saveEntries(entries.map((e) => ({ ...e, cancel: false }))), "Richiesta di annullamento ritirata.");
+    return;
+  }
+  const what = n === 1 ? `${D.fmtDay(entries[0].date)} è già approvato come ${TYPE_LABEL[entries[0].type]}` : `${n} giorni sono già approvati`;
+  if (!confirm(`${what}.\n\nVuoi chiedere al rappresentante di annullare ${n === 1 ? "il giorno" : "questi giorni"}? ${n === 1 ? "Resta approvato" : "Restano approvati"} finché non conferma.`)) return;
+  const list = entries.filter((e) => !e.cancel).map((e) => ({ ...e, cancel: true, cancelDenied: false, updatedAt: Date.now() }));
+  await act(() => store.saveEntries(list), "Richiesta di annullamento inviata al rappresentante.");
 }
 
 /** Imposta (o rimuove, con type = null) la richiesta di un singolo giorno. */
@@ -939,17 +1107,15 @@ async function setDay(date, type) {
   if (!rid) return;
   const id = entryId(year.id, rid, date);
   const ex = state.entries[id];
+  if (ex?.status === "approved") return askCancel(year, [ex]);
   if (!type) {
     if (!ex) return;
-    if (ex.status === "approved" && !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Vuoi annullarlo?`)) return;
     await act(() => store.deleteEntries([id]), "Richiesta rimossa.");
     return;
   }
-  if (ex?.type === type) return;
-  if (ex?.status === "approved" &&
-      !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Cambiandolo, la richiesta tornerà in attesa di approvazione. Continuare?`)) return;
-  const entry = { id, yearId: year.id, residentId: rid, date, type, status: "pending", note: "", updatedAt: Date.now() };
-  if (await act(() => store.saveEntries([entry]), `${TYPE_LABEL[type]} richiesta per ${D.fmtDay(date)}.`)) warnFerie(year, rid, date, type);
+  if (ex?.type === type && ex.status === "pending") return;
+  const entry = newEntry(year, rid, date, type);
+  if (await act(() => store.saveEntries([entry]), `${TYPE_LABEL[type]} richiesta per ${D.fmtDay(date)}.`)) afterRequest(year, rid, [entry]);
 }
 
 async function toggleDay(date) {
@@ -959,17 +1125,15 @@ async function toggleDay(date) {
   if (ui.brush === "dettagli") return openDaySheet(date);
   const id = entryId(year.id, rid, date);
   const ex = state.entries[id];
+  if (ex?.status === "approved") return askCancel(year, [ex]);
 
   if (ui.brush === "cancella" || (ex && ex.type === ui.brush)) {
     if (!ex) return;
-    if (ex.status === "approved" && !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Vuoi annullarlo?`)) return;
     await act(() => store.deleteEntries([id]));
     return;
   }
-  if (ex?.status === "approved" &&
-      !confirm(`${D.fmtDay(date)} è già approvato come ${TYPE_LABEL[ex.type]}. Cambiandolo, la richiesta tornerà in attesa di approvazione. Continuare?`)) return;
-  const entry = { id, yearId: year.id, residentId: rid, date, type: ui.brush, status: "pending", note: "", updatedAt: Date.now() };
-  if (await act(() => store.saveEntries([entry]))) warnFerie(year, rid, date, entry.type);
+  const entry = newEntry(year, rid, date, ui.brush);
+  if (await act(() => store.saveEntries([entry]))) afterRequest(year, rid, [entry]);
 }
 
 /** File .ics con i giorni approvati dell'anno accademico, da importare nel calendario del telefono. */
@@ -1005,13 +1169,6 @@ function downloadIcs() {
   toast(`${events.length} ${events.length === 1 ? "evento scaricato" : "eventi scaricati"}: aprili per aggiungerli al calendario.`);
 }
 
-function warnFerie(year, rid, date, type) {
-  if (type !== "ferie") return;
-  const ay = D.academicYear(date);
-  const n = countDays(year.id, rid, "ferie", ay, ["approved", "pending"]);
-  if (n > FERIE_LIMIT) toast(`Attenzione: ${n} giorni di ferie nell'a.a. ${ay.label}, oltre il limite di ${FERIE_LIMIT}.`, "warn");
-}
-
 async function submitRange(form) {
   const year = currentYear();
   const rid = year && currentResidentId(year);
@@ -1036,32 +1193,33 @@ async function submitRange(form) {
 /** Richiede più giorni dello stesso tipo (dal modulo "Segna un periodo" o trascinando sul calendario). */
 async function requestDays(year, rid, dates, type, note = "") {
   const list = [];
-  let replacedApproved = 0;
+  let approved = 0;
   for (const date of dates) {
-    const id = entryId(year.id, rid, date);
-    const ex = state.entries[id];
-    if (ex?.type === type && (ex.status === "pending" || (ex.status === "approved" && (ex.note || "") === note))) continue;
-    if (ex?.status === "approved") replacedApproved++;
-    list.push({ id, yearId: year.id, residentId: rid, date, type, status: "pending", note: note || (ex?.type === type ? ex.note || "" : ""), updatedAt: Date.now() });
+    const ex = state.entries[entryId(year.id, rid, date)];
+    if (ex?.status === "approved") { approved++; continue; } // per cambiarli serve l'annullamento
+    if (ex?.type === type && ex.status === "pending" && (!note || (ex.note || "") === note)) continue;
+    list.push(newEntry(year, rid, date, type, note || (ex?.type === type ? ex.note || "" : "")));
   }
+  const skipped = approved ? (approved === 1 ? "1 giorno già approvato è rimasto com'era: per cambiarlo chiedi l'annullamento." : `${approved} giorni già approvati sono rimasti com'erano: per cambiarli chiedi l'annullamento.`) : "";
   if (!list.length) {
-    toast("Questi giorni sono già segnati.");
+    toast(skipped || "Questi giorni sono già segnati.", skipped ? "warn" : "info");
     return false;
   }
-  if (replacedApproved &&
-      !confirm(`${replacedApproved} giorni sono già approvati con un altro tipo o nota: torneranno in attesa di approvazione. Continuare?`)) return false;
   const ok = await act(() => store.saveEntries(list), `${list.length} ${list.length === 1 ? "giorno" : "giorni"} di ${TYPE_LABEL[type].toLowerCase()} ${list.length === 1 ? "richiesto" : "richiesti"}.`);
-  if (ok) warnFerie(year, rid, dates[dates.length - 1], type);
+  if (ok) {
+    afterRequest(year, rid, list);
+    if (skipped && !list.some((e) => e.late)) toast(skipped, "warn");
+  }
   return ok;
 }
 
-/** Cancella più giorni (trascinando con lo strumento "Cancella"). */
+/** Cancella più giorni (trascinando con lo strumento "Cancella"); per quelli già approvati chiede l'annullamento. */
 async function removeDays(year, rid, dates) {
-  const ids = dates.map((d) => entryId(year.id, rid, d)).filter((id) => state.entries[id]);
-  if (!ids.length) return;
-  const approved = ids.filter((id) => state.entries[id].status === "approved").length;
-  if (approved && !confirm(`${approved} di questi giorni sono già approvati. Cancellarli comunque?`)) return;
-  await act(() => store.deleteEntries(ids), `${ids.length} ${ids.length === 1 ? "giorno cancellato" : "giorni cancellati"}.`);
+  const entries = dates.map((d) => state.entries[entryId(year.id, rid, d)]).filter(Boolean);
+  const approved = entries.filter((e) => e.status === "approved");
+  const ids = entries.filter((e) => e.status !== "approved").map((e) => e.id);
+  if (ids.length) await act(() => store.deleteEntries(ids), `${ids.length} ${ids.length === 1 ? "giorno cancellato" : "giorni cancellati"}.`);
+  if (approved.length) await askCancel(year, approved);
 }
 
 // ---------------------------------------------------------------------------
@@ -1158,7 +1316,7 @@ function wireDrag(res) {
 }
 
 /** Cambia stato a più richieste, chiedendo conferma se si superano i giorni di ferie. */
-async function setStatus(year, entries, status) {
+async function setStatus(year, entries, status, reason = "") {
   if (!entries.length) return;
   if (status === "approved") {
     const add = {};
@@ -1176,9 +1334,54 @@ async function setStatus(year, entries, status) {
     if (warnings.length &&
         !confirm(`Attenzione: superamento del limite di ${FERIE_LIMIT} giorni di ferie.\n\n${warnings.join("\n")}\n\nApprovare comunque?`)) return;
   }
-  const updated = entries.map((e) => ({ ...e, status, updatedAt: Date.now() }));
+  // Qualsiasi decisione chiude anche un'eventuale richiesta di annullamento
+  const updated = entries.map((e) => ({
+    ...e, status, reason: status === "rejected" ? reason : "", cancel: false, cancelDenied: false, updatedAt: Date.now(),
+  }));
   await act(() => store.saveEntries(updated),
     entries.length > 1 ? `${entries.length} richieste: ${STATUS_LABEL[status].toLowerCase()}.` : null);
+}
+
+/** Finestra con un campo di testo; restituisce il testo (anche vuoto) o null se annullata. */
+function askText({ title, text = "", label, placeholder = "", ok = "Conferma", okClass = "primary", maxlength = 200 }) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement("dialog");
+    dlg.className = "modal";
+    dlg.innerHTML = `<form method="dialog">
+        <h2>${esc(title)}</h2>
+        ${text ? `<p class="muted">${text}</p>` : ""}
+        <label class="field"><span>${esc(label)}</span>
+          <textarea name="t" rows="3" maxlength="${maxlength}" placeholder="${esc(placeholder)}"></textarea></label>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" value="cancel">Annulla</button>
+          <button class="btn ${okClass}" value="ok">${esc(ok)}</button>
+        </div>
+      </form>`;
+    document.body.appendChild(dlg);
+    let result = null;
+    dlg.querySelector('[value="cancel"]').addEventListener("click", () => dlg.close());
+    dlg.querySelector("form").addEventListener("submit", () => { result = dlg.querySelector("textarea").value.trim(); });
+    dlg.addEventListener("close", () => { dlg.remove(); resolve(result); });
+    dlg.showModal();
+    dlg.querySelector("textarea").focus();
+  });
+}
+
+/** Rifiuta una o più richieste chiedendo (facoltativamente) il motivo, che lo specializzando vedrà. */
+async function rejectWithReason(year, entries) {
+  if (!entries.length) return;
+  const e = entries[0];
+  const who = `${nameOf(year, e.residentId)} · ${TYPE_LABEL[e.type]} ${entries.length === 1 ? D.fmtDay(e.date) : `(${entries.length} giorni)`}`;
+  const reason = await askText({
+    title: "Rifiuta la richiesta",
+    text: esc(who),
+    label: "Motivo (facoltativo, lo vedrà lo specializzando)",
+    placeholder: "Es. già 3 assenti in Stroke quel giorno",
+    ok: "Rifiuta",
+    okClass: "danger-solid",
+  });
+  if (reason === null) return;
+  await setStatus(year, entries, "rejected", reason);
 }
 
 function exportPeriod() {
@@ -1259,10 +1462,11 @@ function wire() {
     }
     const cancel = e.target.closest('[data-action="cancel-group"]');
     if (cancel) {
-      const ids = cancel.dataset.ids.split(",");
-      const approved = ids.some((id) => state.entries[id]?.status === "approved");
-      if (!confirm(approved ? "Alcuni di questi giorni sono già approvati. Annullare comunque la richiesta?" : "Annullare questa richiesta?")) return;
-      await act(() => store.deleteEntries(ids), "Richiesta annullata.");
+      const entries = cancel.dataset.ids.split(",").map((id) => state.entries[id]).filter(Boolean);
+      const approved = entries.filter((x) => x.status === "approved");
+      if (approved.length) return askCancel(currentYear(), approved);
+      if (!confirm("Annullare questa richiesta?")) return;
+      await act(() => store.deleteEntries(entries.map((x) => x.id)), "Richiesta annullata.");
     }
   });
   wireDrag(res);
@@ -1305,6 +1509,15 @@ function wire() {
         if (hash !== year.pinHash) return toast("PIN errato.", "error");
         setUnlocked(year, hash);
         return render();
+      }
+      case "deadline-form": {
+        let from = String(fd.get("from")), to = String(fd.get("to"));
+        const due = String(fd.get("due"));
+        if (!from || !to || !due) return;
+        if (to < from) [from, to] = [to, from];
+        const d = { id: newId("d"), label: String(fd.get("label") || "").trim(), from, to, due, congressi: !!fd.get("congressi") };
+        form.reset();
+        return act(() => store.updateYear(year.id, (y) => ({ ...y, deadlines: [...(y.deadlines || []), d] })), "Scadenza aggiunta.");
       }
       case "add-res-form": {
         const name = String(fd.get("name") || "").trim().replace(/\s+/g, " ");
@@ -1378,7 +1591,9 @@ function wire() {
     const cell = e.target.closest("[data-cell]");
     if (cell) {
       const entry = state.entries[cell.dataset.cell];
-      if (entry) await setStatus(year, [entry], NEXT_STATUS[entry.status]);
+      if (!entry) return;
+      if (NEXT_STATUS[entry.status] === "rejected") return rejectWithReason(year, [entry]);
+      await setStatus(year, [entry], NEXT_STATUS[entry.status]);
       return;
     }
     const btn = e.target.closest("[data-action]");
@@ -1393,7 +1608,27 @@ function wire() {
         return render();
       case "set-status": {
         const entry = state.entries[btn.dataset.id];
-        if (entry) await setStatus(year, [entry], btn.dataset.status);
+        if (!entry) return;
+        if (btn.dataset.status === "rejected") return rejectWithReason(year, [entry]);
+        await setStatus(year, [entry], btn.dataset.status);
+        return;
+      }
+      case "cancel-ok": {
+        const ids = btn.dataset.ids.split(",").filter((id) => state.entries[id]);
+        if (!confirm(`Confermare l'annullamento di ${ids.length} ${ids.length === 1 ? "giorno" : "giorni"}? ${ids.length === 1 ? "Verrà cancellato" : "Verranno cancellati"} dal calendario.`)) return;
+        await act(() => store.deleteEntries(ids), "Annullamento confermato.");
+        return;
+      }
+      case "cancel-no": {
+        const list = btn.dataset.ids.split(",").map((id) => state.entries[id]).filter(Boolean)
+          .map((x) => ({ ...x, cancel: false, cancelDenied: true, updatedAt: Date.now() }));
+        await act(() => store.saveEntries(list), "I giorni restano approvati.");
+        return;
+      }
+      case "remove-deadline": {
+        const d = (year.deadlines || []).find((x) => x.id === btn.dataset.id);
+        if (!d || !confirm(`Eliminare la scadenza «${d.label || "Richieste"}» del ${D.fmtDay(d.due)}?`)) return;
+        await act(() => store.updateYear(year.id, (y) => ({ ...y, deadlines: (y.deadlines || []).filter((x) => x.id !== d.id) })), "Scadenza eliminata.");
         return;
       }
       case "approve-row":

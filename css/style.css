@@ -619,3 +619,41 @@ textarea { width: 100%; resize: vertical; line-height: 1.4; }
   .topbar, .toolbar, .install-btn, .tabs, .btn, .brush, .range-form { display: none !important; }
   body { background: #fff; }
 }
+
+/* ---------- Motivo del rifiuto, richieste in ritardo, annullamenti ---------- */
+.reason { display: inline-block; font-size: .8rem; color: var(--danger); font-style: italic; }
+.flag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
+.flag.late { background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+.flag.cancel { background: var(--danger-soft); color: var(--danger); }
+.cell { position: relative; }
+.cell.cancel { text-decoration: line-through; outline: 2px dashed var(--danger); outline-offset: 1px; }
+.cell.late::after { content: ""; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); border: 1.5px solid var(--surface); }
+.day.cancel { border-style: dashed; border-color: var(--danger); }
+.cancel-card { border-left: 4px solid var(--danger); }
+.sheet-actions.one { grid-template-columns: 1fr; }
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* ---------- Scadenze ---------- */
+.deadline { border-left: 4px solid var(--primary); }
+.deadlines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.deadlines li { display: flex; gap: 10px; align-items: baseline; }
+.dl-icon { flex: none; }
+.countdown { font-weight: 700; color: var(--primary); }
+.deadlines li.soon .countdown { color: var(--danger); }
+.deadlines li.past { color: var(--muted); }
+#deadline-form { align-items: flex-end; flex-wrap: wrap; }
+
+/* ---------- Finestra con campo di testo ---------- */
+.modal {
+  border: 0;
+  border-radius: var(--radius);
+  padding: 20px;
+  width: min(440px, calc(100vw - 32px));
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.modal::backdrop { background: rgba(15, 20, 32, .5); }
+.modal h2 { margin-bottom: 6px; }
+.modal .field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 14px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
